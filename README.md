@@ -25,10 +25,6 @@ AI漫导是一款基于 Flutter 开发的移动应用，采用 **AI 智能体架
 
 ![](/images/d82ef8a6d34fa0bcd71636ae2e931e28.jpg)
 
-生产过程录屏视频：
-
-![](images/AI漫剧APP-2.mp4)
-
 
 我总结了一下大概的流程是这样子的：
 
