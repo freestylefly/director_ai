@@ -240,6 +240,17 @@ static const int _maxIterations = 10;
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 提交 Pull Request
 
+## star 趋势图
+
+[![Star History Chart](https://api.star-history.com/svg?repos=freestylefly/director_ai&type=Date)](https://star-history.com/#freestylefly/director_ai&Date)
+
+## 公众号
+
+微信搜 **苍何** 或扫描下方二维码关注苍何的原创公众号，回复 **AI** 即可和 18000+ 好友一同探讨AI，一同学习 AI Coding。
+
+![苍何微信公众号](https://cdn.tobebetterjavaer.com/stutymore/%E6%89%AB%E7%A0%81_%E6%90%9C%E7%B4%A2%E8%81%94%E5%90%88%E4%BC%A0%E6%92%AD%E6%A0%B7%E5%BC%8F-%E6%A0%87%E5%87%86%E8%89%B2%E7%89%88.png)
+
+
 ## 📄 许可证
 
 本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
