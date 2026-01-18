@@ -1,0 +1,37 @@
+# AI Storyboard Pro - Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core Web Framework
+gradio>=4.0.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+
+# HTTP Client
+requests>=2.28.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Image Processing
+Pillow>=9.0.0
+
+# Environment Management
+python-dotenv>=1.0.0
+
+# Document Processing (for smart import)
+python-docx>=0.8.11
+PyPDF2>=3.0.0
+markdown>=3.4.0
+
+# Optional: Video Analysis
+# opencv-python>=4.7.0
+# moviepy>=1.0.3
+
+# Optional: PDF Report Generation
+# reportlab>=4.0.0
+# fpdf2>=2.7.0
+
+# Development
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0

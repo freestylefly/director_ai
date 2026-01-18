@@ -1,0 +1,45 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project data (user-generated)
+projects/
+outputs/
+exports/
+backups/
+uploads/
+pdf_outputs/
+prompt_outputs/
+video_analysis/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+tmpclaude-*/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# ComfyUI workflow cache
+workflows/*.cache

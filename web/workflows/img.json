@@ -1,0 +1,152 @@
+{
+  "57": {
+    "inputs": {
+      "samples": [
+        "60",
+        0
+      ],
+      "vae": [
+        "62",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "58": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图片"
+    }
+  },
+  "60": {
+    "inputs": {
+      "seed": 34466225000384,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "72",
+        0
+      ],
+      "positive": [
+        "64",
+        0
+      ],
+      "negative": [
+        "63",
+        0
+      ],
+      "latent_image": [
+        "69",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "61": {
+    "inputs": {
+      "unet_name": "flux-2-klein-9b.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "Load Diffusion Model"
+    }
+  },
+  "62": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Load VAE"
+    }
+  },
+  "63": {
+    "inputs": {
+      "conditioning": [
+        "64",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "ConditioningZeroOut"
+    }
+  },
+  "64": {
+    "inputs": {
+      "text": [
+        "111",
+        0
+      ],
+      "clip": [
+        "65",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "65": {
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Load CLIP"
+    }
+  },
+  "69": {
+    "inputs": {
+      "width": 1024,
+      "height": 768,
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "第2步设置图片宽高"
+    }
+  },
+  "72": {
+    "inputs": {
+      "enable_fp16_accumulation": true,
+      "model": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "ModelPatchTorchSettings",
+    "_meta": {
+      "title": "Model Patch Torch Settings"
+    }
+  },
+  "111": {
+    "inputs": {
+      "value": "创作一个马年的ip形象，就是要给非常可爱的马卡龙风格小马，给大家拜年和恭喜发财的形象，ip 形象，要胖胖的，qq的非常可爱那种。 画面只要一个ip。 "
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "第1步填写提示词"
+    }
+  }
+}
