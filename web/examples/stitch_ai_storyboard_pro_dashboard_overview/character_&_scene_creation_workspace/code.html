@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>角色与场景创建工作区</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                        "surface-dark": "#16202a",
+                        "border-dark": "#233648",
+                        "text-secondary": "#94a3b8"
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #101922; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #233648; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334e68; 
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white h-screen flex flex-col overflow-hidden antialiased selection:bg-primary/30">
+<header class="flex shrink-0 items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-background-dark px-6 py-3 z-20">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3 text-white">
+<div class="size-8 text-primary">
+<svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M36.7273 44C33.9891 44 31.6043 39.8386 30.3636 33.69C29.123 39.8386 26.7382 44 24 44C21.2618 44 18.877 39.8386 17.6364 33.69C16.3957 39.8386 14.0109 44 11.2727 44C7.25611 44 4 35.0457 4 24C4 12.9543 7.25611 4 11.2727 4C14.0109 4 16.3957 8.16144 17.6364 14.31C18.877 8.16144 21.2618 4 24 4C26.7382 4 29.123 8.16144 30.3636 14.31C31.6043 8.16144 33.9891 4 36.7273 4C40.7439 4 44 12.9543 44 24C44 35.0457 40.7439 44 36.7273 44Z"></path>
+</svg>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-tight">AI Storyboard Pro</h2>
+</div>
+<label class="hidden md:flex flex-col min-w-40 !h-9 w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full ring-1 ring-border-dark bg-surface-dark transition-all focus-within:ring-primary">
+<div class="text-text-secondary flex border-none items-center justify-center pl-3 rounded-l-lg">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-white focus:outline-0 border-none bg-transparent h-full placeholder:text-text-secondary px-3 text-sm font-normal leading-normal" placeholder="搜索资产..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex items-center justify-end gap-6">
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-text-secondary hover:text-white text-sm font-medium transition-colors" href="#">仪表盘</a>
+<a class="text-text-secondary hover:text-white text-sm font-medium transition-colors" href="#">剧本</a>
+<a class="text-white text-sm font-medium transition-colors relative after:content-[''] after:absolute after:-bottom-[21px] after:left-0 after:w-full after:h-[2px] after:bg-primary" href="#">创建</a>
+<a class="text-text-secondary hover:text-white text-sm font-medium transition-colors" href="#">分镜</a>
+<a class="text-text-secondary hover:text-white text-sm font-medium transition-colors" href="#">制作</a>
+</nav>
+<div class="flex items-center gap-3 pl-4 border-l border-border-dark">
+<button class="text-text-secondary hover:text-white">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-8 ring-2 ring-border-dark" data-alt="User profile picture showing a smiling person" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDcum9h_PgTfMT3IaLXx5PCpv2zBPOr5a-BTrKXrwIi2L8JtQPf8GV5O1eLQSjnNkeBlkH7vYUbvS2dadJB0N99VTnkQQtUyjuOCHMAl4OH_18a9OnbBiIl2rZsRPA-D1Cv_eeb9eoXJ0egX_qQ4Q5vU02VWjOo2LEVVcwpud-Wd8CtgFPRb0ptaRa9N182jVkG2pt-hkBguypQ1EahF8MUrpANmOOupvMIix_Uc6EFm5GPlVvM3KBTIdUFO-0HvLhxhMKBm6XIDms");'></div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden h-full">
+<aside class="w-80 flex flex-col border-r border-border-dark bg-background-dark z-10">
+<div class="p-4 border-b border-border-dark">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-white text-sm font-semibold uppercase tracking-wider text-text-secondary">项目资产</h3>
+<button class="text-primary hover:text-blue-400">
+<span class="material-symbols-outlined">add_circle</span>
+</button>
+</div>
+<div class="flex h-9 w-full items-center justify-center rounded-lg bg-surface-dark p-1 ring-1 ring-border-dark">
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-md px-2 has-[:checked]:bg-border-dark has-[:checked]:text-white text-text-secondary text-xs font-medium transition-all">
+<span>角色</span>
+<input checked="" class="invisible w-0 absolute" name="asset-type" type="radio" value="Characters"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center overflow-hidden rounded-md px-2 has-[:checked]:bg-border-dark has-[:checked]:text-white text-text-secondary text-xs font-medium transition-all">
+<span>场景</span>
+<input class="invisible w-0 absolute" name="asset-type" type="radio" value="Scenes"/>
+</label>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-2 space-y-1">
+<div class="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark cursor-pointer transition-colors border border-transparent hover:border-border-dark">
+<div class="bg-center bg-no-repeat bg-cover rounded-md size-10 shrink-0 bg-surface-dark" data-alt="Thumbnail of detective character Miller with a fedora" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCuKzyaJqWaburLSYYmdC741uBr7wQVilvM7INCH64dNu23RDJYzomNi_lIldAqxUnpa7hgZXx-mMMImmxhmt9mU406Y-kVD6RuOXHSzzLJnzOXxDgk2qn50EzVYLy0_eydJ7UbtTse8K7gN17jPN8xT3kuFcurwW3Am0fI7RiCur89bfLM2PAsmr7KigGpNk--ORrh9pyTylE9BJlzSzrfiDY00RFDSAgEdI3AeWyMc0GnTyqsTjf3967uoRSkfPTmue35TSShU6Q");'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">Det. Miller</p>
+<p class="text-text-secondary text-xs truncate">黑色电影 • 主角</p>
+</div>
+<span class="material-symbols-outlined text-text-secondary text-[18px] opacity-0 group-hover:opacity-100">more_vert</span>
+</div>
+<div class="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark cursor-pointer transition-colors border border-transparent hover:border-border-dark">
+<div class="bg-center bg-no-repeat bg-cover rounded-md size-10 shrink-0 bg-surface-dark" data-alt="Thumbnail of a cyberpunk female character with neon hair" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDAUm1mhw94C9tZVqIb3UXBTQgSLcIcnucCsIxcGxI4YvhcfmQJSvic-pk8PQ5q6bHjDxxmHDbFhnfTmgvKFHUUNvO1OpVnCDmbePc2p2PMEemM0LrAHhzxbFYiz_2O-lVK_zFjzm3aEulTBy1M-g81a32AZCLasGTv-J5Wwjp8GWmHcLL76k7OX5zciszvs5xHMzjYHX91unAdptpJRmYK5YUfX7YFD3_511dxCQA2xp4OnHhWU4c0PVeqFCJfxFentf6TCYyy5NE");'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">Vera Cypher</p>
+<p class="text-text-secondary text-xs truncate">赛博朋克 • 反派</p>
+</div>
+<span class="material-symbols-outlined text-text-secondary text-[18px] opacity-0 group-hover:opacity-100">more_vert</span>
+</div>
+<div class="group flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark cursor-pointer transition-colors border border-transparent hover:border-border-dark">
+<div class="bg-center bg-no-repeat bg-cover rounded-md size-10 shrink-0 bg-surface-dark" data-alt="Thumbnail of a rainy neo-tokyo street at night" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuA6OWU9wY6xO51tmbZ_W4F6V9MKTNoG_X0-xk_sUb9oQCkHKa68HAJWOWi7uRQpI0QyudpSi2Hg7JjI2scqzKCK9i6KAq6Qt3oJMtYg94iFddt17g-0B113WCE0kDqfFoCjq2cu2mnCj0ooeK9y2R_c9TeuRdUVuj4-KuaSmxnGYECugkXpNeMsRQ2KMv20MYSVy6cv2ZbyqwNBGKIb9y_gvzMHvzFyZgRzbbOCgAKC9OHQwfHMEVwIEcejJzS1C4wmMM4gW5Euhk4");'></div>
+<div class="flex-1 min-w-0">
+<p class="text-white text-sm font-medium truncate group-hover:text-primary transition-colors">霓虹街道</p>
+<p class="text-text-secondary text-xs truncate">外景 • 夜晚 • 雨天</p>
+</div>
+<span class="material-symbols-outlined text-text-secondary text-[18px] opacity-0 group-hover:opacity-100">more_vert</span>
+</div>
+</div>
+<div class="p-4 border-t border-border-dark text-xs text-text-secondary flex justify-between">
+<span>12/50 资产已使用</span>
+<span class="text-primary font-medium">升级方案</span>
+</div>
+</aside>
+<main class="flex-1 flex flex-col bg-surface-dark/30 overflow-y-auto relative">
+<div class="max-w-4xl mx-auto w-full p-8 pb-32">
+<div class="mb-8">
+<div class="flex items-center gap-2 text-text-secondary text-sm mb-2">
+<span>资产</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span>角色</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-white">新建</span>
+</div>
+<h1 class="text-3xl font-bold text-white tracking-tight">创建角色</h1>
+</div>
+<div class="grid grid-cols-1 gap-8">
+<div class="space-y-6">
+<div>
+<label class="block text-sm font-medium text-text-secondary uppercase tracking-wider mb-2">角色名称</label>
+<input class="w-full bg-surface-dark border border-border-dark rounded-lg p-3 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all" placeholder="例如：指挥官谢泼德" type="text"/>
+</div>
+<div class="relative group">
+<div class="flex justify-between items-center mb-2">
+<label class="block text-sm font-medium text-text-secondary uppercase tracking-wider">外貌描述</label>
+<button class="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+<span>AI 自动生成</span>
+</button>
+</div>
+<textarea class="w-full bg-surface-dark border border-border-dark rounded-lg p-3 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-primary outline-none transition-all resize-none" placeholder="描述面部特征、服装、配饰、年龄和情绪..." rows="5"></textarea>
+<button class="absolute bottom-3 right-3 bg-primary hover:bg-blue-600 text-white text-sm font-medium px-3 py-1.5 rounded-md flex items-center gap-2 transition-colors shadow-lg shadow-blue-900/20">
+<span class="material-symbols-outlined text-[18px]">smart_toy</span>
+                                生成
+                            </button>
+</div>
+</div>
+<hr class="border-border-dark"/>
+<div>
+<div class="flex justify-between items-center mb-3">
+<label class="block text-sm font-medium text-text-secondary uppercase tracking-wider">参考图片</label>
+<span class="text-xs text-text-secondary">支持格式: PNG, JPG, WEBP</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+<div class="col-span-1 md:col-span-4 border-2 border-dashed border-border-dark rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-surface-dark/50 hover:border-primary/50 transition-all cursor-pointer group">
+<div class="bg-surface-dark p-3 rounded-full mb-3 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-text-secondary text-3xl">cloud_upload</span>
+</div>
+<p class="text-white text-sm font-medium">点击上传或拖拽文件至此</p>
+<p class="text-text-secondary text-xs mt-1">最大文件大小 10MB</p>
+</div>
+<div class="relative rounded-lg overflow-hidden aspect-[4/3] group border border-border-dark">
+<img class="w-full h-full object-cover" data-alt="Reference image of a woman looking sideways" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgpvGKUv4w_Eq-eoK4DcDXZiTJ0EsbU5GXLYcmWJJeMZtuNwQCmxojhgwq31vXJW5hNWqBgJoUL8hK8tlLjqlS9gtoC2bijAZV5qnKwY1gNNaDlVgeaE0WYw7sfVce9I7QvcyrUiLsbP8XTVmeYGsILG0nlRJ3IB4BfZcxdA_7HTszAc8bU6dqIunyF79UI6spVR9OcS1zUGoVFcvwGj-XhCKwT1jPZeIdOxLxwJIdoYBHmv7a6AgzLwPPLOaijVd7G5YTDciEku8"/>
+<button class="absolute top-1 right-1 bg-black/70 hover:bg-red-500/80 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-all backdrop-blur-sm">
+<span class="material-symbols-outlined text-[14px] block">close</span>
+</button>
+</div>
+<div class="relative rounded-lg overflow-hidden aspect-[4/3] group border border-border-dark">
+<img class="w-full h-full object-cover" data-alt="Reference image of a model with artistic makeup" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1CWv1QyLr6tVdUK7HbTOO-eI8m24x0ui_NHolTBOyx75HxvKrKldOFfas7zKPslYwyz-jZdQPNBtl2X7BgF8jWgQtZEmN7byFwUR3dI4_ABzqkjkWEpv2HmVJltkNwdHU2AwMUV4UXVHidl_QmzyamkiC0BL5N3OUvuawgoUoUENHEegbal7qsQejZTvI_HC1968zvekZfRcs0nbwPLEK0ilpAnPHi7KFK2P7nR2p98_gWnwYWMbeleFylUcsK7GieMdOn8z1n34"/>
+<button class="absolute top-1 right-1 bg-black/70 hover:bg-red-500/80 text-white rounded p-1 opacity-0 group-hover:opacity-100 transition-all backdrop-blur-sm">
+<span class="material-symbols-outlined text-[14px] block">close</span>
+</button>
+</div>
+</div>
+</div>
+<hr class="border-border-dark"/>
+<div>
+<label class="block text-sm font-medium text-text-secondary uppercase tracking-wider mb-4">视觉风格</label>
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+<label class="relative cursor-pointer group">
+<input checked="" class="peer sr-only" name="style" type="radio" value="cinematic"/>
+<div class="aspect-square rounded-lg overflow-hidden border-2 border-transparent peer-checked:border-primary ring-offset-2 ring-offset-background-dark transition-all">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Cinematic movie scene abstract preview" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDU_igaLqwEgZLqDYMWIZ0Tpn5f3Bqx3BWr_DcJgaLPgCs5ZbxQZQxVayH1Yt7EPUBtQJPLpEiwRPicsJPdeX01IXcYuDDfGuwDFZwfQquCRQjN1pj7butdLBDlPWyl63DueAKYl_v_KvSD7llhB9YA7HeNbOXVspvk-aRTcNv0P5EkBrtBJ_I38mybHLYhpW9c8Xar7OqcWzlJ8sOiCx4xxnHAB1f8YHI6lJP9ZpHlGJNZ-u4Q6j-IgtJ8-n7DDDqBqWETC4MBESk"/>
+<span class="absolute bottom-2 left-2 text-white text-sm font-medium z-20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px] text-primary" data-weight="fill">movie</span> 电影感
+                                    </span>
+</div>
+<div class="absolute top-2 right-2 bg-primary size-5 rounded-full items-center justify-center hidden peer-checked:flex z-20">
+<span class="material-symbols-outlined text-white text-[14px]">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer group">
+<input class="peer sr-only" name="style" type="radio" value="anime"/>
+<div class="aspect-square rounded-lg overflow-hidden border-2 border-transparent peer-checked:border-primary ring-offset-2 ring-offset-background-dark transition-all">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Anime style illustration abstract preview" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAymPQaC2o4odBuF20uQtoPs-UffYPOa5Tm7A0Bu82QlAoyz08H9ufgQyFrBXECNIlSsMKwiqaI48WzH1aCHPOPrwE-tGw-a-jFnS1ZtCIY66APUlARppRlN-uEi37uMKqat2jL7OE7TvVhqqbdSuG9UGrB8s07N8KPc1TRG0XFAUmMPaz5Zkrzb2VCZYZbgJzY6aH6W6DOTSv5qG4J37Lza6nAi5NsqFtKwUbhJWQS9k9NYExQIW-H2ULRaBQuXzpj1RgF6DlWaUo"/>
+<span class="absolute bottom-2 left-2 text-white text-sm font-medium z-20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">brush</span> 动漫
+                                   </span>
+</div>
+<div class="absolute top-2 right-2 bg-primary size-5 rounded-full items-center justify-center hidden peer-checked:flex z-20">
+<span class="material-symbols-outlined text-white text-[14px]">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer group">
+<input class="peer sr-only" name="style" type="radio" value="comic"/>
+<div class="aspect-square rounded-lg overflow-hidden border-2 border-transparent peer-checked:border-primary ring-offset-2 ring-offset-background-dark transition-all">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Comic book style illustration preview" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCv3nBSifm3oPYyNyhcZczrIJofiF0uGznDnfTcAe9nMymXSIY7xZPLAnb2VD2L_OYAJJSbpDFBbg-tizfihui4YFOJ66GibIRbBPseFIH51_izIVLgwALVw18ZtkhtcOevh7IlRVf6N79xzeBx_dVduPl2EjQI669meyjWhDV8U6TYxX_oH1_xtDaPMCBRpSD6xwXSOedJArOn0NUCEy1Q4D6g5KwUC1361dHGq0FqrEZTGXaTccNWXyKLyNO9_XTVNALHR0VQnPM"/>
+<span class="absolute bottom-2 left-2 text-white text-sm font-medium z-20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">menu_book</span> 漫画
+                                   </span>
+</div>
+<div class="absolute top-2 right-2 bg-primary size-5 rounded-full items-center justify-center hidden peer-checked:flex z-20">
+<span class="material-symbols-outlined text-white text-[14px]">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer group">
+<input class="peer sr-only" name="style" type="radio" value="3d"/>
+<div class="aspect-square rounded-lg overflow-hidden border-2 border-transparent peer-checked:border-primary ring-offset-2 ring-offset-background-dark transition-all">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="3D render style abstract preview" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5LWF7GE_rkLx0_5rfB4t2WAtT9BMR8Ihq46oGTWDurkCYVKHkvwaCWaXBp2xyk38U74FPuAOxE0s8-i6Yhm1Kdr64cTd_ORSPcqqZn3Ii56QfFo89OKCBrd1YpoQfvHcQ0Kzq2d5rkJQh_gEk9V3yIJD7A5D2hQ4m0bVCqPSKlZuX5FB9HlkGHAald8unxiW0iiXEbOrLZUnpd8TKN0w10-21zwOEDn4MKuQ5ukFQZdkd26FPA64QmN9pFSEdoSZgR7UFyaWvhRg"/>
+<span class="absolute bottom-2 left-2 text-white text-sm font-medium z-20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">view_in_ar</span> 3D 渲染
+                                   </span>
+</div>
+<div class="absolute top-2 right-2 bg-primary size-5 rounded-full items-center justify-center hidden peer-checked:flex z-20">
+<span class="material-symbols-outlined text-white text-[14px]">check</span>
+</div>
+</label>
+<label class="relative cursor-pointer group">
+<input class="peer sr-only" name="style" type="radio" value="oil"/>
+<div class="aspect-square rounded-lg overflow-hidden border-2 border-transparent peer-checked:border-primary ring-offset-2 ring-offset-background-dark transition-all">
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10"></div>
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="Oil painting style abstract preview" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCjRozUgI9QxOcS5Sx7eOtJvjm4qb8mXS6-Yrq3pIoZqZTnLqroXwSAx-T_RyYcUyeI3tpD3C2mU1Q0hPbVfUcb0jqbH55p1nypN4py2RnadWteqk_K2YrQYQbfPXp-K-fSr96t_1UtTHwX-pZdbF9cv-WpeAfkSvADPtF8f52Wy1n0hcsHVkWErnZAr9n7SaSbOkTz2j2rUVwWrbqO29xeL-hpNZ7Qikvg-DilOlHuRfnUvqqXaKpNI1dl4tDmyvxwee9BlpQxgWs"/>
+<span class="absolute bottom-2 left-2 text-white text-sm font-medium z-20 flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">palette</span> 油画
+                                   </span>
+</div>
+<div class="absolute top-2 right-2 bg-primary size-5 rounded-full items-center justify-center hidden peer-checked:flex z-20">
+<span class="material-symbols-outlined text-white text-[14px]">check</span>
+</div>
+</label>
+</div>
+</div>
+</div>
+</div>
+<div class="absolute bottom-0 left-0 w-full bg-background-dark/95 backdrop-blur-md border-t border-border-dark p-4 flex justify-between items-center z-20 px-8">
+<div class="text-sm text-text-secondary">
+<span class="inline-block size-2 rounded-full bg-green-500 mr-2"></span> 系统就绪
+                </div>
+<div class="flex gap-4">
+<button class="px-6 py-2.5 rounded-lg text-sm font-medium text-white hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark">放弃</button>
+<button class="px-6 py-2.5 rounded-lg text-sm font-medium bg-primary text-white hover:bg-blue-600 transition-colors shadow-lg shadow-blue-900/40">保存角色</button>
+</div>
+</div>
+</main>
+<aside class="w-80 flex flex-col border-l border-border-dark bg-background-dark z-10 overflow-y-auto">
+<div class="p-4 border-b border-border-dark flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">tune</span>
+<h3 class="text-white text-sm font-semibold uppercase tracking-wider">引擎设置</h3>
+</div>
+<div class="p-5 space-y-6">
+<div class="space-y-2">
+<label class="text-xs font-bold text-text-secondary uppercase">生成模型</label>
+<div class="relative">
+<select class="w-full appearance-none bg-surface-dark border border-border-dark rounded-lg py-2 px-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary">
+<option>Stable Diffusion XL 1.0</option>
+<option>Midjourney V6 (API)</option>
+<option>DALL-E 3 (OpenAI)</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-2.5 text-text-secondary pointer-events-none text-[18px]">expand_more</span>
+</div>
+</div>
+<div class="space-y-4">
+<div class="space-y-2">
+<div class="flex justify-between text-xs text-text-secondary">
+<label class="font-bold uppercase">CFG Scale (提示词相关性)</label>
+<span class="text-white">7.0</span>
+</div>
+<input class="w-full h-1 bg-surface-dark rounded-lg appearance-none cursor-pointer [&amp;::-webkit-slider-thumb]:appearance-none [&amp;::-webkit-slider-thumb]:w-3 [&amp;::-webkit-slider-thumb]:h-3 [&amp;::-webkit-slider-thumb]:bg-primary [&amp;::-webkit-slider-thumb]:rounded-full" max="20" min="1" type="range" value="7"/>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-xs text-text-secondary">
+<label class="font-bold uppercase">采样步数</label>
+<span class="text-white">30</span>
+</div>
+<input class="w-full h-1 bg-surface-dark rounded-lg appearance-none cursor-pointer [&amp;::-webkit-slider-thumb]:appearance-none [&amp;::-webkit-slider-thumb]:w-3 [&amp;::-webkit-slider-thumb]:h-3 [&amp;::-webkit-slider-thumb]:bg-primary [&amp;::-webkit-slider-thumb]:rounded-full" max="150" min="10" type="range" value="30"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-bold text-text-secondary uppercase">画面比例</label>
+<div class="grid grid-cols-3 gap-2">
+<button class="bg-surface-dark hover:bg-border-dark border border-border-dark text-white text-xs py-2 rounded-md transition-colors">1:1</button>
+<button class="bg-primary/20 border border-primary text-white text-xs py-2 rounded-md transition-colors">16:9</button>
+<button class="bg-surface-dark hover:bg-border-dark border border-border-dark text-white text-xs py-2 rounded-md transition-colors">9:16</button>
+</div>
+</div>
+<div class="mt-8 flex flex-col flex-1">
+<label class="text-xs font-bold text-text-secondary uppercase mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px]">terminal</span> 输出日志
+                    </label>
+<div class="bg-black/80 rounded-lg p-3 font-mono text-[11px] leading-relaxed text-green-500/90 h-48 overflow-y-auto border border-border-dark shadow-inner">
+<p class="opacity-50">&gt; 系统初始化完成。</p>
+<p class="opacity-50">&gt; 已连接至 gpu-cluster-01。</p>
+<p class="text-white">&gt; 等待输入...</p>
+<p class="text-blue-400 mt-2">&gt; [信息] 模型加载耗时 0.4s</p>
+</div>
+</div>
+</div>
+</aside>
+</div>
+
+</body></html>

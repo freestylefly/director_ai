@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>技术架构对比 - AI分镜项目对比</title>
+    <style>
+        :root {
+            --primary-a: #6366f1;
+            --primary-b: #10b981;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, var(--primary-a), var(--primary-b));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            padding: 12px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        nav a:hover, nav a.active {
+            border-color: var(--primary-a);
+        }
+
+        .architecture-section {
+            margin-bottom: 60px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .architecture-diagram {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+        }
+
+        .diagram-container {
+            display: flex;
+            gap: 40px;
+        }
+
+        @media (max-width: 1000px) {
+            .diagram-container {
+                flex-direction: column;
+            }
+        }
+
+        .diagram-panel {
+            flex: 1;
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .diagram-panel.panel-a {
+            border: 2px solid var(--primary-a);
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .diagram-panel.panel-b {
+            border: 2px solid var(--primary-b);
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .diagram-title {
+            text-align: center;
+            font-size: 1.2rem;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .layer {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .layer-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .layer-content {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .layer-item {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .panel-a .layer-item {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+        }
+
+        .panel-b .layer-item {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+
+        .arrow-down {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            margin: 8px 0;
+        }
+
+        .tech-comparison {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .tech-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .tech-card h4 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            font-size: 1.1rem;
+        }
+
+        .tech-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .tech-card ul {
+            list-style: none;
+        }
+
+        .tech-card li {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .tech-card li:last-child {
+            border-bottom: none;
+        }
+
+        .tag-a {
+            color: var(--primary-a);
+            font-size: 0.85rem;
+        }
+
+        .tag-b {
+            color: var(--primary-b);
+            font-size: 0.85rem;
+        }
+
+        .flowchart {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
+            overflow-x: auto;
+        }
+
+        .flowchart-title {
+            text-align: center;
+            font-size: 1.3rem;
+            margin-bottom: 30px;
+        }
+
+        .flowchart svg {
+            display: block;
+            margin: 0 auto;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>技术架构对比</h1>
+
+            <nav>
+                <a href="index.html">总览</a>
+                <a href="architecture.html" class="active">技术架构</a>
+                <a href="workflow.html">工作流程</a>
+                <a href="features.html">功能特性</a>
+            </nav>
+        </header>
+
+        <section class="architecture-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                系统架构图
+            </h2>
+
+            <div class="architecture-diagram">
+                <div class="diagram-container">
+                    <div class="diagram-panel panel-a">
+                        <div class="diagram-title">AI 智能分镜 Pro</div>
+
+                        <div class="layer">
+                            <div class="layer-label">表现层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">Gradio Web UI</span>
+                                <span class="layer-item">Flutter Mobile</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">API层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">FastAPI REST</span>
+                                <span class="layer-item">Pydantic</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">业务逻辑层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">Services</span>
+                                <span class="layer-item">Models</span>
+                                <span class="layer-item">Templates</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">生成引擎</div>
+                            <div class="layer-content">
+                                <span class="layer-item">苍何API</span>
+                                <span class="layer-item">ComfyUI</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">数据层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">JSON Files</span>
+                                <span class="layer-item">File System</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="diagram-panel panel-b">
+                        <div class="diagram-title">分镜大师 Storyboard</div>
+
+                        <div class="layer">
+                            <div class="layer-label">表现层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">Avalonia UI</span>
+                                <span class="layer-item">XAML</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">应用层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">Application</span>
+                                <span class="layer-item">Domain</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">基础设施层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">Infrastructure</span>
+                                <span class="layer-item">FFmpeg</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">AI服务</div>
+                            <div class="layer-content">
+                                <span class="layer-item">通义千问</span>
+                                <span class="layer-item">火山引擎</span>
+                                <span class="layer-item">OpenAI</span>
+                            </div>
+                        </div>
+
+                        <div class="arrow-down">↓</div>
+
+                        <div class="layer">
+                            <div class="layer-label">数据层</div>
+                            <div class="layer-content">
+                                <span class="layer-item">SQLite</span>
+                                <span class="layer-item">Migrations</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="architecture-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                </svg>
+                技术栈详细对比
+            </h2>
+
+            <div class="tech-comparison">
+                <div class="tech-card">
+                    <h4>
+                        <span class="tech-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="16 18 22 12 16 6"></polyline>
+                                <polyline points="8 6 2 12 8 18"></polyline>
+                            </svg>
+                        </span>
+                        编程语言
+                    </h4>
+                    <ul>
+                        <li>
+                            <span>主语言</span>
+                            <span><span class="tag-a">Python</span> / <span class="tag-b">C#</span></span>
+                        </li>
+                        <li>
+                            <span>移动端</span>
+                            <span><span class="tag-a">Dart (Flutter)</span> / <span class="tag-b">-</span></span>
+                        </li>
+                        <li>
+                            <span>前端</span>
+                            <span><span class="tag-a">Gradio</span> / <span class="tag-b">XAML</span></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tech-card">
+                    <h4>
+                        <span class="tech-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                        </span>
+                        UI框架
+                    </h4>
+                    <ul>
+                        <li>
+                            <span>桌面/Web</span>
+                            <span><span class="tag-a">Gradio 4.0+</span> / <span class="tag-b">Avalonia 11.x</span></span>
+                        </li>
+                        <li>
+                            <span>跨平台</span>
+                            <span><span class="tag-a">浏览器</span> / <span class="tag-b">原生桌面</span></span>
+                        </li>
+                        <li>
+                            <span>响应式</span>
+                            <span><span class="tag-a">自动</span> / <span class="tag-b">XAML布局</span></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tech-card">
+                    <h4>
+                        <span class="tech-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                            </svg>
+                        </span>
+                        数据存储
+                    </h4>
+                    <ul>
+                        <li>
+                            <span>类型</span>
+                            <span><span class="tag-a">文件系统</span> / <span class="tag-b">SQLite</span></span>
+                        </li>
+                        <li>
+                            <span>格式</span>
+                            <span><span class="tag-a">JSON</span> / <span class="tag-b">关系型</span></span>
+                        </li>
+                        <li>
+                            <span>迁移</span>
+                            <span><span class="tag-a">手动</span> / <span class="tag-b">自动迁移</span></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tech-card">
+                    <h4>
+                        <span class="tech-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            </svg>
+                        </span>
+                        API设计
+                    </h4>
+                    <ul>
+                        <li>
+                            <span>风格</span>
+                            <span><span class="tag-a">REST API</span> / <span class="tag-b">本地调用</span></span>
+                        </li>
+                        <li>
+                            <span>验证</span>
+                            <span><span class="tag-a">Pydantic</span> / <span class="tag-b">内置验证</span></span>
+                        </li>
+                        <li>
+                            <span>文档</span>
+                            <span><span class="tag-a">OpenAPI</span> / <span class="tag-b">-</span></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tech-card">
+                    <h4>
+                        <span class="tech-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                        </span>
+                        运行环境
+                    </h4>
+                    <ul>
+                        <li>
+                            <span>运行时</span>
+                            <span><span class="tag-a">Python 3.9+</span> / <span class="tag-b">.NET 8.0</span></span>
+                        </li>
+                        <li>
+                            <span>依赖管理</span>
+                            <span><span class="tag-a">pip/requirements</span> / <span class="tag-b">NuGet</span></span>
+                        </li>
+                        <li>
+                            <span>部署</span>
+                            <span><span class="tag-a">Uvicorn</span> / <span class="tag-b">独立可执行</span></span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="tech-card">
+                    <h4>
+                        <span class="tech-icon">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                                <circle cx="12" cy="13" r="4"></circle>
+                            </svg>
+                        </span>
+                        视频处理
+                    </h4>
+                    <ul>
+                        <li>
+                            <span>工具</span>
+                            <span><span class="tag-a">Python库</span> / <span class="tag-b">FFmpeg</span></span>
+                        </li>
+                        <li>
+                            <span>抽帧</span>
+                            <span><span class="tag-a">自定义</span> / <span class="tag-b">4种算法</span></span>
+                        </li>
+                        <li>
+                            <span>集成</span>
+                            <span><span class="tag-a">可选</span> / <span class="tag-b">内置</span></span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="architecture-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                架构特点分析
+            </h2>
+
+            <div class="flowchart">
+                <svg width="900" height="400" viewBox="0 0 900 400">
+                    <!-- Project A Side -->
+                    <rect x="50" y="20" width="380" height="360" rx="10" fill="rgba(99, 102, 241, 0.1)" stroke="#6366f1" stroke-width="2"/>
+                    <text x="240" y="50" fill="#6366f1" font-size="16" font-weight="bold" text-anchor="middle">AI 智能分镜 Pro</text>
+
+                    <!-- A - Advantages -->
+                    <rect x="70" y="70" width="160" height="130" rx="8" fill="#1e293b" stroke="#6366f1"/>
+                    <text x="150" y="95" fill="#a5b4fc" font-size="12" font-weight="bold" text-anchor="middle">优势</text>
+                    <text x="80" y="120" fill="#94a3b8" font-size="11">+ 三端覆盖</text>
+                    <text x="80" y="140" fill="#94a3b8" font-size="11">+ REST API</text>
+                    <text x="80" y="160" fill="#94a3b8" font-size="11">+ 快速原型</text>
+                    <text x="80" y="180" fill="#94a3b8" font-size="11">+ 模板系统</text>
+
+                    <!-- A - Considerations -->
+                    <rect x="250" y="70" width="160" height="130" rx="8" fill="#1e293b" stroke="#6366f1"/>
+                    <text x="330" y="95" fill="#a5b4fc" font-size="12" font-weight="bold" text-anchor="middle">考量点</text>
+                    <text x="260" y="120" fill="#94a3b8" font-size="11">- 需要Python环境</text>
+                    <text x="260" y="140" fill="#94a3b8" font-size="11">- JSON文件存储</text>
+                    <text x="260" y="160" fill="#94a3b8" font-size="11">- 依赖外部服务</text>
+                    <text x="260" y="180" fill="#94a3b8" font-size="11">- 网络依赖</text>
+
+                    <!-- A - Best For -->
+                    <rect x="70" y="220" width="340" height="140" rx="8" fill="#1e293b" stroke="#6366f1"/>
+                    <text x="240" y="250" fill="#a5b4fc" font-size="13" font-weight="bold" text-anchor="middle">适用场景</text>
+                    <text x="80" y="280" fill="#f1f5f9" font-size="12">远程协作团队</text>
+                    <text x="80" y="305" fill="#f1f5f9" font-size="12">需要API集成的项目</text>
+                    <text x="80" y="330" fill="#f1f5f9" font-size="12">移动办公需求</text>
+                    <text x="80" y="355" fill="#f1f5f9" font-size="12">快速迭代开发</text>
+
+                    <!-- Project B Side -->
+                    <rect x="470" y="20" width="380" height="360" rx="10" fill="rgba(16, 185, 129, 0.1)" stroke="#10b981" stroke-width="2"/>
+                    <text x="660" y="50" fill="#10b981" font-size="16" font-weight="bold" text-anchor="middle">分镜大师 Storyboard</text>
+
+                    <!-- B - Advantages -->
+                    <rect x="490" y="70" width="160" height="130" rx="8" fill="#1e293b" stroke="#10b981"/>
+                    <text x="570" y="95" fill="#6ee7b7" font-size="12" font-weight="bold" text-anchor="middle">优势</text>
+                    <text x="500" y="120" fill="#94a3b8" font-size="11">+ 本地优先</text>
+                    <text x="500" y="140" fill="#94a3b8" font-size="11">+ 数据私有</text>
+                    <text x="500" y="160" fill="#94a3b8" font-size="11">+ 离线能力</text>
+                    <text x="500" y="180" fill="#94a3b8" font-size="11">+ 视频抽帧</text>
+
+                    <!-- B - Considerations -->
+                    <rect x="670" y="70" width="160" height="130" rx="8" fill="#1e293b" stroke="#10b981"/>
+                    <text x="750" y="95" fill="#6ee7b7" font-size="12" font-weight="bold" text-anchor="middle">考量点</text>
+                    <text x="680" y="120" fill="#94a3b8" font-size="11">- 仅桌面端</text>
+                    <text x="680" y="140" fill="#94a3b8" font-size="11">- 需要.NET运行时</text>
+                    <text x="680" y="160" fill="#94a3b8" font-size="11">- 无API接口</text>
+                    <text x="680" y="180" fill="#94a3b8" font-size="11">- 单机使用</text>
+
+                    <!-- B - Best For -->
+                    <rect x="490" y="220" width="340" height="140" rx="8" fill="#1e293b" stroke="#10b981"/>
+                    <text x="660" y="250" fill="#6ee7b7" font-size="13" font-weight="bold" text-anchor="middle">适用场景</text>
+                    <text x="500" y="280" fill="#f1f5f9" font-size="12">数据安全要求高</text>
+                    <text x="500" y="305" fill="#f1f5f9" font-size="12">网络环境不稳定</text>
+                    <text x="500" y="330" fill="#f1f5f9" font-size="12">偏好桌面软件</text>
+                    <text x="500" y="355" fill="#f1f5f9" font-size="12">视频素材处理</text>
+                </svg>
+            </div>
+        </section>
+
+        <footer>
+            <p>技术架构对比分析 | 生成于 2026-02-03</p>
+        </footer>
+    </div>
+</body>
+</html>

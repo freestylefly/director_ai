@@ -1,0 +1,164 @@
+{
+  "api_name": "苍何 API",
+  "base_url": "https://api.canghe.ai",
+  "auth": {
+    "type": "bearer",
+    "header": "Authorization",
+    "format": "Bearer {api_key}"
+  },
+  "endpoints": {
+    "chat": {
+      "path": "/v1/chat/completions",
+      "method": "POST",
+      "description": "聊天补全接口 (兼容 OpenAI)"
+    },
+    "image": {
+      "text_to_image": {
+        "path": "/fal-ai/nano-banana",
+        "method": "POST",
+        "description": "文生图 (Fal.ai nano-banana)",
+        "async": true,
+        "params": {
+          "prompt": { "type": "string", "required": true, "description": "生成图片的提示词" },
+          "num_images": { "type": "integer", "required": false, "default": 1, "min": 1, "max": 4 }
+        }
+      },
+      "image_edit": {
+        "path": "/fal-ai/nano-banana/edit",
+        "method": "POST",
+        "description": "图片编辑 (Fal.ai nano-banana/edit)",
+        "async": true,
+        "params": {
+          "prompt": { "type": "string", "required": true, "description": "编辑提示词" },
+          "image_urls": { "type": "array", "required": true, "description": "需要编辑的图片 URL" },
+          "num_images": { "type": "integer", "required": false, "default": 1, "min": 1, "max": 4 }
+        }
+      },
+      "get_result": {
+        "path": "/fal-ai/{model_name}/requests/{request_id}",
+        "method": "GET",
+        "description": "获取图像生成结果"
+      }
+    },
+    "video": {
+      "create": {
+        "path": "/v1/video/create",
+        "method": "POST",
+        "description": "创建视频 (统一接口)",
+        "async": true
+      },
+      "query": {
+        "path": "/v1/video/query",
+        "method": "GET",
+        "description": "查询视频任务状态"
+      },
+      "jimeng_submit": {
+        "path": "/jimeng/submit/videos",
+        "method": "POST",
+        "description": "即梦视频生成 (原生接口)",
+        "async": true
+      },
+      "jimeng_fetch": {
+        "path": "/jimeng/fetch/{task_id}",
+        "method": "GET",
+        "description": "查询即梦任务 (免费)"
+      }
+    }
+  },
+  "models": {
+    "chat": [
+      "gpt-3.5-turbo",
+      "gpt-4",
+      "gpt-4-turbo"
+    ],
+    "image": [
+      {
+        "id": "nano-banana",
+        "name": "Nano Banana (Google Imagen)",
+        "type": "text_to_image",
+        "output_size": "1024x1024"
+      },
+      {
+        "id": "nano-banana/edit",
+        "name": "Nano Banana Edit",
+        "type": "image_edit"
+      }
+    ],
+    "video": {
+      "veo": [
+        { "id": "veo2", "name": "VEO2 基础版", "frames": false, "components": false },
+        { "id": "veo2-fast", "name": "VEO2 快速版", "frames": false, "components": false },
+        { "id": "veo2-fast-frames", "name": "VEO2 快速+首尾帧", "frames": true, "max_images": 2 },
+        { "id": "veo2-fast-components", "name": "VEO2 快速+素材", "components": true, "max_images": 3 },
+        { "id": "veo2-pro", "name": "VEO2 高质量版", "frames": false, "components": false },
+        { "id": "veo2-pro-components", "name": "VEO2 Pro+素材", "components": true, "max_images": 3 },
+        { "id": "veo3", "name": "VEO3 基础版", "frames": false, "aspect_ratio": true },
+        { "id": "veo3-fast", "name": "VEO3 快速版", "frames": false, "aspect_ratio": true },
+        { "id": "veo3-fast-frames", "name": "VEO3 快速+首尾帧", "frames": true, "max_images": 2, "aspect_ratio": true },
+        { "id": "veo3-frames", "name": "VEO3 帧控制", "frames": true, "aspect_ratio": true },
+        { "id": "veo3-pro", "name": "VEO3 高质量版", "frames": false, "aspect_ratio": true },
+        { "id": "veo3-pro-frames", "name": "VEO3 Pro+首帧", "frames": true, "max_images": 1, "aspect_ratio": true },
+        { "id": "veo3.1", "name": "VEO3.1 最新版", "frames": false, "aspect_ratio": true },
+        { "id": "veo3.1-fast", "name": "VEO3.1 快速版", "frames": false, "aspect_ratio": true },
+        { "id": "veo3.1-pro", "name": "VEO3.1 高质量版", "frames": false, "aspect_ratio": true },
+        { "id": "veo3.1-components", "name": "VEO3.1 + 素材", "components": true, "max_images": 3, "aspect_ratio": true }
+      ],
+      "jimeng": [
+        { "id": "jimeng-video-3.0", "name": "即梦视频 3.0", "duration": [5, 10], "aspect_ratios": ["1:1", "21:9", "16:9", "9:16", "4:3", "3:4"] }
+      ]
+    }
+  },
+  "status_codes": {
+    "fal_ai": {
+      "IN_QUEUE": "排队中",
+      "IN_PROGRESS": "生成中",
+      "COMPLETED": "已完成",
+      "FAILED": "失败"
+    },
+    "veo": {
+      "pending": "等待中",
+      "image_downloading": "图片下载中",
+      "video_generating": "视频生成中",
+      "video_generation_completed": "视频生成完成",
+      "video_generation_failed": "视频生成失败",
+      "video_upsampling": "视频超分中",
+      "video_upsampling_completed": "超分完成",
+      "video_upsampling_failed": "超分失败",
+      "completed": "全部完成",
+      "failed": "失败",
+      "error": "错误"
+    },
+    "jimeng": {
+      "NOT_START": "未开始",
+      "SUBMITTED": "已提交",
+      "QUEUED": "排队中",
+      "IN_PROGRESS": "进行中",
+      "FAILURE": "失败",
+      "SUCCESS": "成功"
+    }
+  },
+  "polling": {
+    "image": {
+      "interval_ms": 2000,
+      "max_attempts": 60,
+      "timeout_ms": 120000
+    },
+    "video": {
+      "interval_ms": 5000,
+      "max_attempts": 120,
+      "timeout_ms": 600000
+    }
+  },
+  "defaults": {
+    "image": {
+      "model": "nano-banana",
+      "num_images": 1
+    },
+    "video": {
+      "model": "veo3.1-fast",
+      "enhance_prompt": true,
+      "enable_upsample": false,
+      "aspect_ratio": "16:9"
+    }
+  }
+}

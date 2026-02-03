@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>镜头序列编排 - Storyboard Pro AI</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#111a22",
+                        "surface-dark": "#1c252e",
+                        "border-dark": "#233648",
+                        "text-secondary": "#92adc9",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111a22; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #233648; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334b63; 
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-white overflow-hidden h-screen flex flex-col">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-background-dark px-6 py-3 shrink-0 z-20">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-white">
+<div class="size-8 text-primary">
+<svg class="w-full h-full" fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path d="M36.7273 44C33.9891 44 31.6043 39.8386 30.3636 33.69C29.123 39.8386 26.7382 44 24 44C21.2618 44 18.877 39.8386 17.6364 33.69C16.3957 39.8386 14.0109 44 11.2727 44C7.25611 44 4 35.0457 4 24C4 12.9543 7.25611 4 11.2727 4C14.0109 4 16.3957 8.16144 17.6364 14.31C18.877 8.16144 21.2618 4 24 4C26.7382 4 29.123 8.16144 30.3636 14.31C31.6043 8.16144 33.9891 4 36.7273 4C40.7439 4 44 12.9543 44 24C44 35.0457 40.7439 44 36.7273 44Z" fill="currentColor"></path>
+</svg>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Storyboard Pro AI</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6 ml-4">
+<a class="text-text-secondary hover:text-white text-sm font-medium leading-normal transition-colors" href="#">仪表盘</a>
+<a class="text-white text-sm font-medium leading-normal border-b-2 border-primary pb-0.5" href="#">项目</a>
+<a class="text-text-secondary hover:text-white text-sm font-medium leading-normal transition-colors" href="#">资源</a>
+<a class="text-text-secondary hover:text-white text-sm font-medium leading-normal transition-colors" href="#">团队</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<label class="flex flex-col min-w-40 !h-9 max-w-64 hidden sm:flex">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full border border-border-dark overflow-hidden">
+<div class="text-text-secondary flex border-none bg-surface-dark items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-white focus:outline-0 focus:ring-0 border-none bg-surface-dark focus:border-none h-full placeholder:text-text-secondary px-3 text-sm font-normal leading-normal" placeholder="搜索镜头..." value=""/>
+</div>
+</label>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-9 ring-2 ring-border-dark" data-alt="User avatar with a gradient background" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD6q27ouVGHCSBTqC9Wd376KZry72mCKQ6y5SW-2zlfb0T-lPl9XtUdcHu9CrrPdZR-HZPdrjt76zFmA_Ex3lxgjcTsn4b6Sz4iQ3Y8ZIe9vslFW3q62h-OYj1tUGnzQyVLggsBnsi9n551365tnzkxpUmEX5kyeQBNDDLxTLhgs_e0VYyx4Hu1Jr4NQbsYYuXkKsyZt1MnFpWWbhOUxveGf_QjCcv5ddNWGbYSZwOJLurc7cclN_ipPFmpPztSYjXuE1oKqeo7eXE");'></div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<aside class="w-64 bg-background-dark border-r border-border-dark hidden lg:flex flex-col shrink-0">
+<div class="p-4 border-b border-border-dark">
+<div class="flex gap-3 items-center">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-lg size-12 shadow-lg" data-alt="Abstract movie poster thumbnail" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAJIL_vZuPJd-eNn7CH40Wv4SZWejngZK8lO49xQtZx_t7s7dzCEs2T5Ycqc_yukGl_i0YMwWz4ppnlguHmG3AwCTI3UG2iL-wA4NNodhGmVolTu1_DDUtTJAZ90UlQu8wtrTH-GIOfxfwrDvUbJUppnQWd5IaexKF54HOMJbzANclOaIz8SsjEhVMQm4mG9E4RjQKzzM_O4aY4HTr7y5SHDgsoUB57ed62YUBnFglBoawaOTi7Ukc6q34OLrDyYHJbAhhuvp5i47Q");'></div>
+<div class="flex flex-col overflow-hidden">
+<h1 class="text-white text-sm font-bold truncate">阿尔法项目</h1>
+<p class="text-text-secondary text-xs truncate">科幻惊悚片</p>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-1 p-3 overflow-y-auto flex-1">
+<div class="text-xs font-semibold text-text-secondary uppercase tracking-wider px-3 py-2 mt-2">结构</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white text-[20px]">movie</span>
+<p class="text-text-secondary group-hover:text-white text-sm font-medium">所有场景</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-[#233648]/50 border border-[#233648]" href="#">
+<span class="material-symbols-outlined text-primary text-[20px]">view_timeline</span>
+<p class="text-white text-sm font-medium">场景 4 - 追逐戏</p>
+</a>
+<div class="text-xs font-semibold text-text-secondary uppercase tracking-wider px-3 py-2 mt-4">资源</div>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white text-[20px]">group</span>
+<p class="text-text-secondary group-hover:text-white text-sm font-medium">角色</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-surface-dark group" href="#">
+<span class="material-symbols-outlined text-text-secondary group-hover:text-white text-[20px]">location_on</span>
+<p class="text-text-secondary group-hover:text-white text-sm font-medium">地点</p>
+</a>
+</div>
+</aside>
+<main class="flex flex-1 flex-col min-w-0 bg-[#0d1218] relative">
+<div class="flex flex-col border-b border-border-dark bg-background-dark/95 backdrop-blur z-10 sticky top-0">
+<div class="flex items-center justify-between p-6 pb-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2">
+<span class="bg-primary/20 text-primary text-xs font-bold px-2 py-0.5 rounded">场景 4</span>
+<span class="text-text-secondary text-xs">内景 公路 - 日间</span>
+</div>
+<h1 class="text-white text-2xl font-bold leading-tight">追逐戏序列</h1>
+<p class="text-text-secondary text-sm">编排动作流程并完善生成提示词。</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-10 px-4 rounded-lg bg-surface-dark border border-border-dark text-white text-sm font-medium hover:bg-[#2a3c50] transition flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">upload</span>
+                        导出
+                    </button>
+<div class="flex rounded-lg bg-primary overflow-hidden">
+<button class="h-10 px-4 bg-primary text-white text-sm font-bold flex items-center gap-2 hover:bg-blue-600 transition">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                            添加镜头
+                        </button>
+<button class="h-10 px-2 bg-primary border-l border-white/20 text-white hover:bg-blue-600 transition flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">arrow_drop_down</span>
+</button>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2 px-6 pb-4 overflow-x-auto no-scrollbar">
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-dark border border-border-dark text-white text-xs font-medium hover:border-text-secondary transition whitespace-nowrap">
+<span class="material-symbols-outlined text-[16px]">tune</span>
+                    筛选
+                </button>
+<div class="w-px h-6 bg-border-dark mx-2"></div>
+<button class="px-3 py-1.5 rounded-full bg-primary/20 border border-primary/50 text-primary text-xs font-medium whitespace-nowrap">所有镜头</button>
+<button class="px-3 py-1.5 rounded-full bg-transparent border border-border-dark text-text-secondary hover:text-white text-xs font-medium whitespace-nowrap">全景镜头</button>
+<button class="px-3 py-1.5 rounded-full bg-transparent border border-border-dark text-text-secondary hover:text-white text-xs font-medium whitespace-nowrap">角色聚焦</button>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-6 space-y-4">
+<div class="group relative flex flex-col bg-surface-dark rounded-lg border border-border-dark hover:border-[#3b526b] transition-colors overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-[#60a5fa]"></div> 
+<div class="flex flex-col sm:flex-row gap-4 p-4 pl-6">
+<div class="flex flex-col gap-3 min-w-[200px]">
+<div class="flex items-center gap-3">
+<span class="text-text-secondary cursor-move hover:text-white" title="Drag to reorder">
+<span class="material-symbols-outlined">drag_indicator</span>
+</span>
+<span class="text-white font-mono font-bold text-lg">S-001</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#60a5fa]/10 text-[#60a5fa] border border-[#60a5fa]/20">全景</span>
+</div>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-background-dark border border-border-dark">
+<span class="material-symbols-outlined text-text-secondary text-[14px]">location_on</span>
+<span class="text-xs text-gray-300">室外 公路</span>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-background-dark border border-border-dark">
+<span class="material-symbols-outlined text-text-secondary text-[14px]">wb_sunny</span>
+<span class="text-xs text-gray-300">日落</span>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<label class="text-xs font-medium text-text-secondary flex justify-between">
+                            AI 生成提示词
+                            <span class="text-[10px] bg-green-500/10 text-green-400 px-1.5 rounded">已优化</span>
+</label>
+<textarea class="w-full bg-background-dark border border-border-dark rounded p-3 text-sm text-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition resize-none font-display leading-relaxed" rows="3">电影感全景镜头，黄金时刻荒凉沙漠公路的摇摄视图，沥青路面上升起热浪，戏剧性光照，8k分辨率，照片级真实感，变形镜头光斑。</textarea>
+<div class="flex items-center justify-between mt-1 pt-2 border-t border-border-dark/50">
+<button class="text-xs font-medium text-primary hover:text-blue-400 flex items-center gap-1 transition">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+                                查看标准分镜格式
+                            </button>
+<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded hover:bg-background-dark text-text-secondary hover:text-white" title="Move Up">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button class="p-1.5 rounded hover:bg-background-dark text-text-secondary hover:text-white" title="Move Down">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+<div class="w-px h-4 bg-border-dark mx-1"></div>
+<button class="p-1.5 rounded hover:bg-red-500/10 text-text-secondary hover:text-red-400" title="Delete">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="group relative flex flex-col bg-surface-dark rounded-lg border border-border-dark hover:border-[#3b526b] transition-colors overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-[#a78bfa]"></div> 
+<div class="flex flex-col sm:flex-row gap-4 p-4 pl-6">
+<div class="flex flex-col gap-3 min-w-[200px]">
+<div class="flex items-center gap-3">
+<span class="text-text-secondary cursor-move hover:text-white" title="Drag to reorder">
+<span class="material-symbols-outlined">drag_indicator</span>
+</span>
+<span class="text-white font-mono font-bold text-lg">S-002</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20">中景</span>
+</div>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-background-dark border border-border-dark">
+<span class="material-symbols-outlined text-text-secondary text-[14px]">person</span>
+<span class="text-xs text-gray-300">杰克 (司机)</span>
+</div>
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-background-dark border border-border-dark">
+<span class="material-symbols-outlined text-text-secondary text-[14px]">toys</span>
+<span class="text-xs text-gray-300">车内</span>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<label class="text-xs font-medium text-text-secondary flex justify-between">
+                            AI 生成提示词
+                        </label>
+<textarea class="w-full bg-background-dark border border-border-dark rounded p-3 text-sm text-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition resize-none font-display leading-relaxed" rows="3">副驾驶座视角的中景镜头，杰克紧紧握住真皮方向盘，额头上有汗珠，表情紧张，阳光中尘埃飞舞，高度细节纹理。</textarea>
+<div class="flex items-center justify-between mt-1 pt-2 border-t border-border-dark/50">
+<button class="text-xs font-medium text-primary hover:text-blue-400 flex items-center gap-1 transition">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+                                查看标准分镜格式
+                            </button>
+<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded hover:bg-background-dark text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button class="p-1.5 rounded hover:bg-background-dark text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+<div class="w-px h-4 bg-border-dark mx-1"></div>
+<button class="p-1.5 rounded hover:bg-red-500/10 text-text-secondary hover:text-red-400">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="group relative flex flex-col bg-surface-dark rounded-lg border border-border-dark hover:border-[#3b526b] transition-colors overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 w-1.5 bg-[#818cf8]"></div> 
+<div class="flex flex-col sm:flex-row gap-4 p-4 pl-6">
+<div class="flex flex-col gap-3 min-w-[200px]">
+<div class="flex items-center gap-3">
+<span class="text-text-secondary cursor-move hover:text-white" title="Drag to reorder">
+<span class="material-symbols-outlined">drag_indicator</span>
+</span>
+<span class="text-white font-mono font-bold text-lg">S-003</span>
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#818cf8]/10 text-[#818cf8] border border-[#818cf8]/20">特写</span>
+</div>
+<div class="flex flex-wrap gap-2">
+<div class="flex items-center gap-1.5 px-2 py-1 rounded bg-background-dark border border-border-dark">
+<span class="material-symbols-outlined text-text-secondary text-[14px]">speed</span>
+<span class="text-xs text-gray-300">速度计</span>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col gap-2">
+<label class="text-xs font-medium text-text-secondary flex justify-between">
+                            AI 生成提示词
+                            <span class="text-[10px] bg-yellow-500/10 text-yellow-400 px-1.5 rounded">草稿</span>
+</label>
+<textarea class="w-full bg-background-dark border border-border-dark rounded p-3 text-sm text-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition resize-none font-display leading-relaxed" rows="3">复古速度计指针超过 100mph 的极端特写微距镜头，震动模糊，玻璃反射，橙色指示灯发光。</textarea>
+<div class="flex items-center justify-between mt-1 pt-2 border-t border-border-dark/50">
+<button class="text-xs font-medium text-primary hover:text-blue-400 flex items-center gap-1 transition">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+                                查看标准分镜格式
+                            </button>
+<div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded hover:bg-background-dark text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-[18px]">arrow_upward</span>
+</button>
+<button class="p-1.5 rounded hover:bg-background-dark text-text-secondary hover:text-white">
+<span class="material-symbols-outlined text-[18px]">arrow_downward</span>
+</button>
+<div class="w-px h-4 bg-border-dark mx-1"></div>
+<button class="p-1.5 rounded hover:bg-red-500/10 text-text-secondary hover:text-red-400">
+<span class="material-symbols-outlined text-[18px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<button class="w-full border border-dashed border-border-dark rounded-lg p-6 flex flex-col items-center justify-center text-text-secondary hover:text-white hover:border-primary hover:bg-surface-dark/50 transition gap-2 group">
+<div class="size-10 rounded-full bg-surface-dark flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined">add</span>
+</div>
+<span class="text-sm font-medium">添加下一个镜头到序列</span>
+</button>
+<div class="h-20"></div> 
+</div>
+</main>
+<aside class="w-80 bg-background-dark border-l border-border-dark flex flex-col shrink-0 hidden xl:flex">
+<div class="p-4 border-b border-border-dark flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-text-secondary text-[20px]">terminal</span>
+<h3 class="text-sm font-bold text-white">系统控制台</h3>
+</div>
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
+</span>
+</div>
+<div class="flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed space-y-3 bg-[#0a0f14] text-gray-400">
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:02:01]</span>
+<span>正在为 <span class="text-blue-400">阿尔法项目</span> 初始化会话...</span>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:02:02]</span>
+<span class="text-green-400">✓ 上下文已加载 (4 个角色, 2 个地点)</span>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:02:05]</span>
+<span>用户操作：<span class="text-yellow-200">修改 S-002</span> 提示词。</span>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:02:05]</span>
+<span>正在分析语义 Token...</span>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:02:06]</span>
+<span>&gt; 增强中："汗水", "紧张", "方向盘"</span>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:02:07]</span>
+<span class="text-green-400">✓ 提示词优化成功。</span>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:05:12]</span>
+<span>正在生成 S-003 预览...</span>
+</div>
+<div class="border-l-2 border-primary pl-2 ml-1 my-2">
+<span class="block text-primary mb-1">正在处理请求 ID: #9928A</span>
+<span class="block">Params: --ar 16:9 --v 6.0 --stylize 250</span>
+<div class="w-full bg-gray-800 h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-2/3"></div>
+</div>
+</div>
+<div class="flex gap-2">
+<span class="text-text-secondary opacity-50">[14:05:14]</span>
+<span>等待 GPU 集群响应...</span>
+</div>
+</div>
+<div class="p-3 border-t border-border-dark bg-background-dark">
+<div class="flex items-center gap-2 bg-surface-dark px-3 py-2 rounded border border-border-dark">
+<span class="material-symbols-outlined text-primary text-[16px]">chevron_right</span>
+<input class="bg-transparent border-none text-xs text-white focus:ring-0 p-0 w-full placeholder:text-text-secondary/50 font-mono" placeholder="输入指令..." type="text"/>
+</div>
+</div>
+</aside>
+</div>
+
+</body></html>

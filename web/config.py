@@ -1,39 +1,53 @@
 """
-AI Storyboard Pro - Configuration
+AI Storyboard Pro v2.2 - 配置兼容层
 
-This module provides backwards compatibility with the old config structure.
-New code should import from settings.py instead.
+此模块提供与旧配置结构的向后兼容。
+新代码应从 settings.py 导入。
 """
 
 from settings import settings, get_settings
 
-# API Configuration - now loaded from settings
-NANA_BANANA_API_KEY = settings.api_key
-NANA_BANANA_BASE_URL = settings.api_base_url
+# =============================================
+# API 配置 - 苍何 API (新)
+# =============================================
+CANGHE_API_KEY = settings.api_key
+CANGHE_API_BASE_URL = settings.api_base_url
 
-# Paths - now loaded from settings
+# 向后兼容别名 (旧代码可能使用这些名称)
+NANA_BANANA_API_KEY = settings.api_key  # 已弃用，使用 CANGHE_API_KEY
+NANA_BANANA_BASE_URL = settings.api_base_url  # 已弃用
+
+# =============================================
+# 路径配置
+# =============================================
 BASE_DIR = settings.base_dir
 ASSETS_DIR = settings.assets_dir
 PROJECTS_DIR = settings.projects_dir
 OUTPUTS_DIR = settings.outputs_dir
 
-# Ensure directories exist
+# 确保目录存在
 settings.ensure_directories()
 
-# Sub-directories for assets
+# 资产子目录
 ASSETS_SUBDIRS = ["characters", "scenes", "props", "styles"]
 
-# Server Configuration
-SERVER_HOST = "0.0.0.0"
-SERVER_PORT = 7860
+# =============================================
+# 服务器配置
+# =============================================
+SERVER_HOST = settings.gradio_host
+SERVER_PORT = settings.gradio_port
 
-# Image Generation Defaults
+# =============================================
+# 图像生成默认值
+# =============================================
 DEFAULT_WIDTH = 1024
 DEFAULT_HEIGHT = 576
 DEFAULT_STEPS = 30
 DEFAULT_GUIDANCE = 7.5
 
-# Aspect Ratio Presets
+# =============================================
+# 宽高比预设
+# =============================================
 ASPECT_RATIOS = {
     "16:9": (1024, 576),
     "9:16": (576, 1024),
@@ -43,7 +57,9 @@ ASPECT_RATIOS = {
     "21:9": (1024, 440)
 }
 
-# Style Presets
+# =============================================
+# 风格预设
+# =============================================
 STYLE_PRESETS = {
     "Cinematic": {
         "render_type": "realistic",
@@ -88,3 +104,8 @@ STYLE_PRESETS = {
         "description": "Photorealistic rendering"
     }
 }
+
+# =============================================
+# 图像生成后端
+# =============================================
+IMAGE_BACKEND = settings.image_backend  # "canghe" 或 "comfyui"

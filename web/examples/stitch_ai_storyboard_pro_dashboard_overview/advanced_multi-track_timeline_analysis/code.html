@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Storyboard Pro - 时间线分析</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#137fec",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101922",
+              "panel-dark": "#16202a",
+              "border-dark": "#233648",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"],
+              "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #101922; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #324d67; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4b6a88; 
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-white overflow-hidden h-screen flex flex-col">
+<header class="flex-none flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark bg-[#111a22] px-6 py-3">
+<div class="flex items-center gap-4 text-white">
+<div class="size-6 text-primary">
+<span class="material-symbols-outlined text-3xl">movie_edit</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Storyboard Pro</h2>
+</div>
+<div class="flex flex-1 justify-end gap-6 items-center">
+<div class="flex items-center gap-6 hidden md:flex">
+<a class="text-slate-300 hover:text-white text-sm font-medium leading-normal transition-colors" href="#">文件</a>
+<a class="text-slate-300 hover:text-white text-sm font-medium leading-normal transition-colors" href="#">编辑</a>
+<a class="text-slate-300 hover:text-white text-sm font-medium leading-normal transition-colors" href="#">视图</a>
+<a class="text-slate-300 hover:text-white text-sm font-medium leading-normal transition-colors" href="#">窗口</a>
+<a class="text-slate-300 hover:text-white text-sm font-medium leading-normal transition-colors" href="#">帮助</a>
+</div>
+<div class="h-6 w-px bg-border-dark hidden md:block"></div>
+<button class="flex cursor-pointer items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-primary hover:bg-blue-600 transition-colors text-white text-sm font-bold leading-normal tracking-[0.015em]">
+<span class="truncate">导出项目</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-9 border border-border-dark" data-alt="User avatar profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDT8zaswqMVotjTnWSGDk6yUZpnr2-Fvn9aETkBUxvu8bURayPdSLfomls5If2vfg5RXbLHIp6ap7zigxRdoJzf2N4LBYYLgmMkHr3WAKw3PEu-VtePIqwdF0lXIbmRUEOZxF6K_YBZfYwJc5nvaIKrCbWanVtYlSdRgWXvM3QXp6DJnhj-TaDDz7yYCQNTCDIgMv97OwJebhU3o5CiB673BZZHcsWXVvW1Bn1VO7FLVHmlzn44Fkt_xl_lzfbDpzqeikhmoK9pwPg");'></div>
+</div>
+</header>
+<div class="flex-none bg-[#111a22] border-b border-border-dark px-6">
+<div class="flex gap-8">
+<a class="flex items-center justify-center border-b-[3px] border-b-transparent hover:border-b-slate-600 text-[#92adc9] hover:text-white pb-[13px] pt-4 transition-all" href="#">
+<span class="material-symbols-outlined mr-2 text-[18px]">description</span>
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">剧本编辑器</p>
+</a>
+<a class="flex items-center justify-center border-b-[3px] border-b-primary text-white pb-[13px] pt-4" href="#">
+<span class="material-symbols-outlined mr-2 text-[18px] fill-current">view_timeline</span>
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">时间线分析</p>
+</a>
+<a class="flex items-center justify-center border-b-[3px] border-b-transparent hover:border-b-slate-600 text-[#92adc9] hover:text-white pb-[13px] pt-4 transition-all" href="#">
+<span class="material-symbols-outlined mr-2 text-[18px]">grid_view</span>
+<p class="text-sm font-bold leading-normal tracking-[0.015em]">网格视图</p>
+</a>
+</div>
+</div>
+<main class="flex-1 flex flex-col min-h-0">
+<div class="flex-none h-14 bg-panel-dark border-b border-border-dark flex items-center justify-between px-4">
+<div class="flex items-center gap-1">
+<button class="p-2 text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined">skip_previous</span>
+</button>
+<button class="p-2 text-white hover:text-primary rounded hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-[28px] fill-current">play_circle</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-white rounded hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined">skip_next</span>
+</button>
+<div class="w-px h-6 bg-border-dark mx-2"></div>
+<button class="p-2 text-red-500 hover:text-red-400 rounded hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined">fiber_manual_record</span>
+</button>
+</div>
+<div class="flex items-center justify-center bg-[#0d131a] border border-border-dark rounded px-4 py-1.5 font-mono text-xl tracking-widest text-primary shadow-inner">
+<span class="text-slate-500 text-xs mr-2 font-display tracking-normal font-medium uppercase">时间码</span>
+            00:01:24:12
+        </div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-500 text-sm">zoom_out</span>
+<div class="w-32 h-1 bg-[#324d67] rounded-full relative cursor-pointer group">
+<div class="absolute left-0 top-0 h-full w-[35%] bg-primary rounded-full"></div>
+<div class="absolute left-[35%] top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md group-hover:scale-125 transition-transform"></div>
+</div>
+<span class="material-symbols-outlined text-slate-500 text-sm">zoom_in</span>
+</div>
+<button class="flex cursor-pointer items-center justify-center overflow-hidden rounded-lg h-8 bg-[#233648] hover:bg-[#2d445a] text-white gap-2 text-xs font-bold leading-normal tracking-[0.015em] px-3 border border-border-dark transition-colors">
+<span class="material-symbols-outlined text-[16px]">auto_awesome</span>
+<span>分析场景</span>
+</button>
+</div>
+</div>
+<div class="flex-1 flex min-h-0">
+<div class="flex-1 flex flex-col min-w-0 bg-[#101922] relative group">
+<div class="h-8 bg-[#16202a] border-b border-border-dark flex w-full relative overflow-hidden text-[10px] text-slate-500 font-mono select-none">
+<div class="w-48 flex-none border-r border-border-dark bg-[#16202a] z-10"></div> 
+<div class="flex-1 flex items-end pb-1 relative">
+<div class="absolute left-0 w-full flex justify-between px-2">
+<span>00:00:00</span><span>00:00:15</span><span>00:00:30</span><span>00:00:45</span><span>00:01:00</span><span>00:01:15</span><span>00:01:30</span><span>00:01:45</span>
+</div>
+<div class="absolute bottom-0 w-full h-1/2 flex justify-between px-2 border-b border-slate-700/30">
+<div class="w-px h-full bg-slate-600"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div>
+<div class="w-px h-full bg-slate-600"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div>
+<div class="w-px h-full bg-slate-600"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div>
+<div class="w-px h-full bg-slate-600"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div><div class="w-px h-2 bg-slate-700"></div>
+<div class="w-px h-full bg-slate-600"></div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto flex">
+<div class="w-48 flex-none bg-[#16202a] border-r border-border-dark flex flex-col z-10 shadow-lg">
+<div class="h-24 border-b border-border-dark flex flex-col justify-center px-3 relative group/track">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-red-400 uppercase tracking-wider">剧情</span>
+<div class="flex gap-1 opacity-0 group-hover/track:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">visibility</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">lock</span>
+</div>
+</div>
+<span class="text-[10px] text-slate-500">叙事弧</span>
+</div>
+<div class="h-24 border-b border-border-dark flex flex-col justify-center px-3 relative group/track">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500"></div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-cyan-400 uppercase tracking-wider">角色</span>
+<div class="flex gap-1 opacity-0 group-hover/track:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">visibility</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">lock</span>
+</div>
+</div>
+<span class="text-[10px] text-slate-500">对话与动作</span>
+</div>
+<div class="h-24 border-b border-border-dark flex flex-col justify-center px-3 relative bg-[#1c2836] group/track">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-blue-400 uppercase tracking-wider">场景</span>
+<div class="flex gap-1"> 
+<span class="material-symbols-outlined text-[14px] text-white cursor-pointer">visibility</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">lock_open</span>
+</div>
+</div>
+<span class="text-[10px] text-slate-400">主场景</span>
+</div>
+<div class="h-24 border-b border-border-dark flex flex-col justify-center px-3 relative group/track">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-500"></div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-amber-400 uppercase tracking-wider">道具</span>
+<div class="flex gap-1 opacity-0 group-hover/track:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">visibility</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">lock</span>
+</div>
+</div>
+<span class="text-[10px] text-slate-500">关键物品</span>
+</div>
+<div class="h-24 border-b border-border-dark flex flex-col justify-center px-3 relative group/track">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-purple-500"></div>
+<div class="flex justify-between items-center mb-1">
+<span class="text-xs font-bold text-purple-400 uppercase tracking-wider">分镜</span>
+<div class="flex gap-1 opacity-0 group-hover/track:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">visibility</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400 cursor-pointer hover:text-white">lock</span>
+</div>
+</div>
+<span class="text-[10px] text-slate-500">摄像机设置</span>
+</div>
+</div>
+<div class="flex-1 relative bg-[#111a22] overflow-x-auto min-w-[800px]">
+<div class="absolute inset-0 z-0 pointer-events-none opacity-20" style="background-image: linear-gradient(90deg, #324d67 1px, transparent 1px); background-size: 100px 100%;"></div>
+<div class="absolute top-0 bottom-0 left-[35%] w-px bg-red-500 z-50 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.5)]">
+<div class="absolute -top-3 -left-[6px] text-red-500">
+<svg fill="none" height="13" viewBox="0 0 13 13" width="13" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 0H13V8L6.5 13L0 8V0Z" fill="currentColor"></path>
+</svg>
+</div>
+</div>
+<div class="h-24 border-b border-border-dark/50 relative py-2">
+<div class="absolute left-[5%] w-[25%] top-2 bottom-2 rounded bg-red-900/40 border border-red-700/60 flex items-center px-2 cursor-pointer hover:bg-red-900/60 transition-colors">
+<span class="text-xs text-red-200 truncate">第一幕：铺垫</span>
+</div>
+<div class="absolute left-[32%] w-[40%] top-2 bottom-2 rounded bg-red-900/40 border border-red-700/60 flex items-center px-2 cursor-pointer hover:bg-red-900/60 transition-colors">
+<span class="text-xs text-red-200 truncate">第二幕：对抗</span>
+</div>
+</div>
+<div class="h-24 border-b border-border-dark/50 relative py-2">
+<div class="absolute left-[10%] w-[15%] top-3 bottom-3 rounded bg-cyan-900/40 border border-cyan-700/60 flex items-center px-2 cursor-pointer hover:bg-cyan-900/60 transition-colors">
+<div class="w-2 h-2 rounded-full bg-cyan-400 mr-2"></div>
+<span class="text-xs text-cyan-200 truncate">主角登场</span>
+</div>
+<div class="absolute left-[35%] w-[10%] top-3 bottom-3 rounded bg-cyan-900/40 border border-cyan-700/60 flex items-center px-2 border-2 border-white shadow-[0_0_15px_rgba(6,182,212,0.3)] z-10">
+<div class="w-2 h-2 rounded-full bg-cyan-400 mr-2"></div>
+<span class="text-xs text-white font-medium truncate">独白</span>
+</div>
+<div class="absolute left-[50%] w-[12%] top-3 bottom-3 rounded bg-cyan-900/40 border border-cyan-700/60 flex items-center px-2 cursor-pointer hover:bg-cyan-900/60 transition-colors">
+<div class="w-2 h-2 rounded-full bg-cyan-400 mr-2"></div>
+<span class="text-xs text-cyan-200 truncate">反派揭露</span>
+</div>
+</div>
+<div class="h-24 border-b border-border-dark/50 relative py-2 bg-[#16202a]/30">
+<div class="absolute left-[0%] w-[20%] top-1 bottom-1 rounded bg-blue-900/30 border border-blue-700/50 flex flex-col justify-center px-2">
+<span class="text-[10px] text-blue-300 font-bold">外景 城市</span>
+<span class="text-[9px] text-blue-400/70">日间</span>
+</div>
+<div class="absolute left-[20.5%] w-[45%] top-1 bottom-1 rounded bg-blue-900/30 border border-blue-700/50 flex flex-col justify-center px-2">
+<span class="text-[10px] text-blue-300 font-bold">内景 公寓</span>
+<span class="text-[9px] text-blue-400/70">夜间</span>
+</div>
+</div>
+<div class="h-24 border-b border-border-dark/50 relative py-4">
+<div class="absolute left-[38%] w-[8%] top-5 bottom-5 rounded-full bg-amber-900/40 border border-amber-700/60 flex items-center justify-center cursor-pointer hover:bg-amber-900/60 transition-colors">
+<span class="material-symbols-outlined text-amber-400 text-sm mr-1">smartphone</span>
+<span class="text-[10px] text-amber-200">手机</span>
+</div>
+<div class="absolute left-[60%] w-[8%] top-5 bottom-5 rounded-full bg-amber-900/40 border border-amber-700/60 flex items-center justify-center cursor-pointer hover:bg-amber-900/60 transition-colors">
+<span class="material-symbols-outlined text-amber-400 text-sm mr-1">local_cafe</span>
+<span class="text-[10px] text-amber-200">马克杯</span>
+</div>
+</div>
+<div class="h-24 border-b border-border-dark/50 relative py-2">
+<div class="absolute left-[20.5%] w-[5%] top-2 bottom-2 rounded bg-purple-900/40 border-l-2 border-l-purple-400 border-y border-r border-purple-700/50 flex items-center justify-center">
+<span class="text-[10px] text-purple-300">全景</span>
+</div>
+<div class="absolute left-[25.5%] w-[8%] top-2 bottom-2 rounded bg-purple-900/40 border-l-2 border-l-purple-400 border-y border-r border-purple-700/50 flex items-center justify-center">
+<span class="text-[10px] text-purple-300">中景</span>
+</div>
+<div class="absolute left-[33.5%] w-[12%] top-2 bottom-2 rounded bg-purple-900/40 border-l-2 border-l-purple-400 border-y border-r border-purple-700/50 flex items-center justify-center">
+<span class="text-[10px] text-purple-300">特写 - 面部</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="w-80 flex-none bg-[#16202a] border-l border-border-dark flex flex-col">
+<div class="p-4 border-b border-border-dark">
+<h3 class="text-white text-sm font-bold mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base">info</span>
+                    检查器
+                </h3>
+<div class="aspect-video w-full bg-black rounded-lg border border-border-dark relative overflow-hidden group">
+<div class="absolute inset-0 bg-cover bg-center opacity-80" data-alt="Storyboard sketch of a character monologue in a dark room" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB9debQ8sAfyqzA7xATw7EiKnp5ptvEVpZ_FSyU-I1wfLcsnwGXxt0LTBBn_k9AOY44H3zl-QJhsZZjJqCJq3dn2FJsrDl8hWT2791bqMwAWI4AhML4nsz8467c4-Yr5CRJTiOR54VLcn_62XANfSqrUcnxH2MNAwGSceEYZpyoyUFRbDMAWfgB6bnqFduKcjDbn1clHvyE3M3A8p8zx_7g8qJmgNCF9B7IU95JNf_TJNe6AtH0bkhyds0N3rksVKDCYP-BvgSCrDY");'></div>
+<div class="absolute bottom-2 right-2 bg-black/60 px-2 py-0.5 rounded text-[10px] text-white backdrop-blur-sm">帧 248</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto p-4 space-y-6">
+<div class="space-y-3">
+<div class="flex justify-between items-center">
+<h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">剪辑详情</h4>
+<span class="text-xs text-primary cursor-pointer hover:underline">编辑</span>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-[#111a22] p-2 rounded border border-border-dark">
+<p class="text-[10px] text-slate-500 mb-1">持续时间</p>
+<p class="text-sm font-mono text-white">00:00:12</p>
+</div>
+<div class="bg-[#111a22] p-2 rounded border border-border-dark">
+<p class="text-[10px] text-slate-500 mb-1">轨道</p>
+<p class="text-sm text-cyan-400 font-medium">角色</p>
+</div>
+</div>
+<div class="space-y-2">
+<div>
+<label class="text-[11px] text-slate-400 block mb-1">标签</label>
+<input class="w-full bg-[#111a22] border border-border-dark rounded px-2 py-1.5 text-xs text-white focus:border-primary focus:ring-0 outline-none" type="text" value="独白 - 内心独白"/>
+</div>
+<div>
+<label class="text-[11px] text-slate-400 block mb-1">摄像机角度</label>
+<select class="w-full bg-[#111a22] border border-border-dark rounded px-2 py-1.5 text-xs text-white focus:border-primary focus:ring-0 outline-none">
+<option>特写 (CU)</option>
+<option>中景 (MS)</option>
+<option>全景 (WS)</option>
+</select>
+</div>
+</div>
+</div>
+<div class="space-y-3 pt-4 border-t border-border-dark">
+<div class="flex justify-between items-center">
+<h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-primary">auto_awesome</span>
+                            AI 分析
+                        </h4>
+</div>
+<div class="space-y-2">
+<div>
+<p class="text-[10px] text-slate-500 mb-1">检测情绪</p>
+<div class="flex flex-wrap gap-2">
+<span class="px-2 py-1 rounded bg-slate-800 text-slate-300 text-[10px] border border-border-dark">沉思</span>
+<span class="px-2 py-1 rounded bg-slate-800 text-slate-300 text-[10px] border border-border-dark">焦虑</span>
+</div>
+</div>
+<div>
+<p class="text-[10px] text-slate-500 mb-1">灯光建议</p>
+<p class="text-xs text-slate-300 leading-relaxed bg-[#111a22] p-2 rounded border border-border-dark">
+                                建议使用高对比度、低调布光。将暖色主光聚焦在主体左侧以强调犹豫感。
+                            </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+</body></html>

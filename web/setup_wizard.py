@@ -184,24 +184,21 @@ def run_wizard(force: bool = False) -> bool:
     # API Configuration
     # ===========================================
     print("-" * 40)
-    print("API Configuration (Optional)")
+    print("API Configuration")
     print("-" * 40)
     print()
-    print("API key is optional. You can use ComfyUI for local image generation.")
-    print("Press Enter to skip, or enter your API key.")
+    print("You need an API key from the image generation service.")
+    print("Get your API key from: https://nanabanana.pro")
     print()
 
-    api_key = get_input("API key (optional, press Enter to skip)", "")
-    if api_key:
+    while True:
+        api_key = get_input("Enter your API key")
         valid, error = validate_api_key(api_key)
         if valid:
             config['api_key'] = api_key
-        else:
-            print(f"  Warning: {error} - using empty key")
-            config['api_key'] = ""
-    else:
-        config['api_key'] = ""
-        print("  Skipped - will use ComfyUI or mock backend")
+            break
+        print(f"  Error: {error}")
+        print()
 
     config['api_base_url'] = get_input(
         "API base URL",

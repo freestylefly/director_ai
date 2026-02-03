@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功能特性对比 - AI分镜项目对比</title>
+    <style>
+        :root {
+            --primary-a: #6366f1;
+            --primary-b: #10b981;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, var(--primary-a), var(--primary-b));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            padding: 12px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        nav a:hover, nav a.active {
+            border-color: var(--primary-a);
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .feature-table {
+            background: var(--bg-card);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 50px;
+        }
+
+        .feature-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .feature-table th {
+            padding: 20px;
+            text-align: left;
+            background: rgba(99, 102, 241, 0.1);
+            font-weight: 600;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .feature-table th:first-child {
+            width: 30%;
+        }
+
+        .feature-table th:nth-child(2) {
+            background: rgba(99, 102, 241, 0.15);
+            text-align: center;
+        }
+
+        .feature-table th:nth-child(3) {
+            background: rgba(16, 185, 129, 0.15);
+            text-align: center;
+        }
+
+        .feature-table td {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .feature-table td:nth-child(2),
+        .feature-table td:nth-child(3) {
+            text-align: center;
+        }
+
+        .feature-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .feature-table tr:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .category-row td {
+            background: rgba(51, 65, 85, 0.5);
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+        }
+
+        .status-icon {
+            width: 24px;
+            height: 24px;
+            display: inline-block;
+        }
+
+        .status-yes {
+            color: var(--success);
+        }
+
+        .status-no {
+            color: var(--error);
+        }
+
+        .status-partial {
+            color: var(--warning);
+        }
+
+        .feature-detail {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .radar-section {
+            margin-bottom: 50px;
+        }
+
+        .radar-container {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            flex-wrap: wrap;
+        }
+
+        .radar-chart {
+            text-align: center;
+        }
+
+        .radar-title {
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .radar-title .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .radar-title .dot.a {
+            background: var(--primary-a);
+        }
+
+        .radar-title .dot.b {
+            background: var(--primary-b);
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 24px;
+            margin-bottom: 50px;
+        }
+
+        .summary-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+            border: 2px solid transparent;
+        }
+
+        .summary-card.card-a {
+            border-color: var(--primary-a);
+        }
+
+        .summary-card.card-b {
+            border-color: var(--primary-b);
+        }
+
+        .summary-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .summary-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+
+        .card-a .summary-icon {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+
+        .card-b .summary-icon {
+            background: linear-gradient(135deg, #10b981, #14b8a6);
+        }
+
+        .summary-header h3 {
+            font-size: 1.2rem;
+        }
+
+        .pros-cons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .pros h4, .cons h4 {
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pros h4 {
+            color: var(--success);
+        }
+
+        .cons h4 {
+            color: var(--warning);
+        }
+
+        .pros ul, .cons ul {
+            list-style: none;
+        }
+
+        .pros li, .cons li {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            padding: 6px 0;
+            padding-left: 16px;
+            position: relative;
+        }
+
+        .pros li::before {
+            content: '+';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        .cons li::before {
+            content: '-';
+            position: absolute;
+            left: 0;
+            color: var(--warning);
+            font-weight: bold;
+        }
+
+        .use-case-section {
+            margin-bottom: 50px;
+        }
+
+        .use-case-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .use-case-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .use-case-card h4 {
+            font-size: 1rem;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .use-case-icon {
+            font-size: 1.5rem;
+        }
+
+        .use-case-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+
+        .recommendation {
+            display: flex;
+            gap: 8px;
+        }
+
+        .rec-tag {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        .rec-tag.a {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+        }
+
+        .rec-tag.b {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+
+        .rec-tag.both {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fcd34d;
+        }
+
+        .conclusion-box {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(16, 185, 129, 0.1));
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+
+        .conclusion-box h3 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+        }
+
+        .conclusion-box p {
+            color: var(--text-secondary);
+            max-width: 800px;
+            margin: 0 auto 16px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>功能特性对比</h1>
+
+            <nav>
+                <a href="index.html">总览</a>
+                <a href="architecture.html">技术架构</a>
+                <a href="workflow.html">工作流程</a>
+                <a href="features.html" class="active">功能特性</a>
+            </nav>
+        </header>
+
+        <section>
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                功能矩阵对比
+            </h2>
+
+            <div class="feature-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>功能特性</th>
+                            <th>AI 智能分镜 Pro</th>
+                            <th>分镜大师 Storyboard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- 平台支持 -->
+                        <tr class="category-row">
+                            <td colspan="3">平台与部署</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                Web 浏览器访问
+                                <div class="feature-detail">通过浏览器访问使用</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-no" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                桌面应用
+                                <div class="feature-detail">原生桌面客户端</div>
+                            </td>
+                            <td><svg class="status-icon status-no" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                移动端应用
+                                <div class="feature-detail">iOS/Android 应用</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-no" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                REST API
+                                <div class="feature-detail">供第三方集成</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-no" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></td>
+                        </tr>
+
+                        <!-- 输入支持 -->
+                        <tr class="category-row">
+                            <td colspan="3">内容输入</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                视频导入
+                                <div class="feature-detail">从视频提取分镜</div>
+                            </td>
+                            <td><svg class="status-icon status-partial" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                智能抽帧
+                                <div class="feature-detail">自动提取关键帧</div>
+                            </td>
+                            <td><svg class="status-icon status-partial" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                PDF 文档导入
+                                <div class="feature-detail">解析PDF剧本</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-no" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                Word 文档导入
+                                <div class="feature-detail">解析Word剧本</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-no" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                文本/Markdown
+                                <div class="feature-detail">纯文本故事输入</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+
+                        <!-- AI能力 -->
+                        <tr class="category-row">
+                            <td colspan="3">AI 能力</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                AI 图像生成
+                                <div class="feature-detail">生成分镜图像</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                AI 视频生成
+                                <div class="feature-detail">生成分镜视频</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                AI 文本分析
+                                <div class="feature-detail">故事结构提取</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                本地生成能力
+                                <div class="feature-detail">离线AI生成</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-partial" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></td>
+                        </tr>
+
+                        <!-- 模板系统 -->
+                        <tr class="category-row">
+                            <td colspan="3">模板与参数</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                镜头模板系统
+                                <div class="feature-detail">预设镜头模板</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> 9种(T1-T9)</td>
+                            <td><svg class="status-icon status-partial" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></td>
+                        </tr>
+                        <tr>
+                            <td>
+                                专业电影参数
+                                <div class="feature-detail">景别/构图/灯光</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+
+                        <!-- 数据与隐私 -->
+                        <tr class="category-row">
+                            <td colspan="3">数据与隐私</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                本地数据存储
+                                <div class="feature-detail">数据留在本地</div>
+                            </td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> JSON文件</td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> SQLite</td>
+                        </tr>
+                        <tr>
+                            <td>
+                                完全离线使用
+                                <div class="feature-detail">无网络依赖</div>
+                            </td>
+                            <td><svg class="status-icon status-partial" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg> 需ComfyUI</td>
+                            <td><svg class="status-icon status-yes" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="radar-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                能力雷达图
+            </h2>
+
+            <div class="radar-container">
+                <div class="radar-chart">
+                    <div class="radar-title">
+                        <span class="dot a"></span>
+                        AI 智能分镜 Pro
+                    </div>
+                    <svg width="300" height="300" viewBox="0 0 300 300">
+                        <!-- Background circles -->
+                        <circle cx="150" cy="150" r="100" fill="none" stroke="#334155" stroke-width="1"/>
+                        <circle cx="150" cy="150" r="75" fill="none" stroke="#334155" stroke-width="1"/>
+                        <circle cx="150" cy="150" r="50" fill="none" stroke="#334155" stroke-width="1"/>
+                        <circle cx="150" cy="150" r="25" fill="none" stroke="#334155" stroke-width="1"/>
+
+                        <!-- Axes -->
+                        <line x1="150" y1="50" x2="150" y2="250" stroke="#334155" stroke-width="1"/>
+                        <line x1="63" y1="100" x2="237" y2="200" stroke="#334155" stroke-width="1"/>
+                        <line x1="63" y1="200" x2="237" y2="100" stroke="#334155" stroke-width="1"/>
+
+                        <!-- Labels -->
+                        <text x="150" y="35" fill="#94a3b8" font-size="11" text-anchor="middle">API集成</text>
+                        <text x="255" y="105" fill="#94a3b8" font-size="11" text-anchor="start">模板系统</text>
+                        <text x="255" y="205" fill="#94a3b8" font-size="11" text-anchor="start">多端支持</text>
+                        <text x="150" y="275" fill="#94a3b8" font-size="11" text-anchor="middle">文档导入</text>
+                        <text x="45" y="205" fill="#94a3b8" font-size="11" text-anchor="end">AI生成</text>
+                        <text x="45" y="105" fill="#94a3b8" font-size="11" text-anchor="end">离线能力</text>
+
+                        <!-- Data polygon -->
+                        <polygon points="150,55 230,105 230,195 150,230 85,195 100,105"
+                                 fill="rgba(99, 102, 241, 0.3)" stroke="#6366f1" stroke-width="2"/>
+
+                        <!-- Data points -->
+                        <circle cx="150" cy="55" r="4" fill="#6366f1"/>
+                        <circle cx="230" cy="105" r="4" fill="#6366f1"/>
+                        <circle cx="230" cy="195" r="4" fill="#6366f1"/>
+                        <circle cx="150" cy="230" r="4" fill="#6366f1"/>
+                        <circle cx="85" cy="195" r="4" fill="#6366f1"/>
+                        <circle cx="100" cy="105" r="4" fill="#6366f1"/>
+                    </svg>
+                </div>
+
+                <div class="radar-chart">
+                    <div class="radar-title">
+                        <span class="dot b"></span>
+                        分镜大师 Storyboard
+                    </div>
+                    <svg width="300" height="300" viewBox="0 0 300 300">
+                        <!-- Background circles -->
+                        <circle cx="150" cy="150" r="100" fill="none" stroke="#334155" stroke-width="1"/>
+                        <circle cx="150" cy="150" r="75" fill="none" stroke="#334155" stroke-width="1"/>
+                        <circle cx="150" cy="150" r="50" fill="none" stroke="#334155" stroke-width="1"/>
+                        <circle cx="150" cy="150" r="25" fill="none" stroke="#334155" stroke-width="1"/>
+
+                        <!-- Axes -->
+                        <line x1="150" y1="50" x2="150" y2="250" stroke="#334155" stroke-width="1"/>
+                        <line x1="63" y1="100" x2="237" y2="200" stroke="#334155" stroke-width="1"/>
+                        <line x1="63" y1="200" x2="237" y2="100" stroke="#334155" stroke-width="1"/>
+
+                        <!-- Labels -->
+                        <text x="150" y="35" fill="#94a3b8" font-size="11" text-anchor="middle">视频抽帧</text>
+                        <text x="255" y="105" fill="#94a3b8" font-size="11" text-anchor="start">数据隐私</text>
+                        <text x="255" y="205" fill="#94a3b8" font-size="11" text-anchor="start">离线能力</text>
+                        <text x="150" y="275" fill="#94a3b8" font-size="11" text-anchor="middle">AI服务商</text>
+                        <text x="45" y="205" fill="#94a3b8" font-size="11" text-anchor="end">桌面体验</text>
+                        <text x="45" y="105" fill="#94a3b8" font-size="11" text-anchor="end">FFmpeg</text>
+
+                        <!-- Data polygon -->
+                        <polygon points="150,55 235,85 235,170 150,200 70,195 70,85"
+                                 fill="rgba(16, 185, 129, 0.3)" stroke="#10b981" stroke-width="2"/>
+
+                        <!-- Data points -->
+                        <circle cx="150" cy="55" r="4" fill="#10b981"/>
+                        <circle cx="235" cy="85" r="4" fill="#10b981"/>
+                        <circle cx="235" cy="170" r="4" fill="#10b981"/>
+                        <circle cx="150" cy="200" r="4" fill="#10b981"/>
+                        <circle cx="70" cy="195" r="4" fill="#10b981"/>
+                        <circle cx="70" cy="85" r="4" fill="#10b981"/>
+                    </svg>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                优劣势总结
+            </h2>
+
+            <div class="summary-grid">
+                <div class="summary-card card-a">
+                    <div class="summary-header">
+                        <div class="summary-icon">🎬</div>
+                        <h3>AI 智能分镜 Pro</h3>
+                    </div>
+                    <div class="pros-cons">
+                        <div class="pros">
+                            <h4>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                优势
+                            </h4>
+                            <ul>
+                                <li>三端覆盖 (Web/API/Mobile)</li>
+                                <li>REST API 便于集成</li>
+                                <li>9种专业镜头模板</li>
+                                <li>多格式文档导入</li>
+                                <li>ComfyUI本地生成</li>
+                                <li>Claude AI 集成</li>
+                            </ul>
+                        </div>
+                        <div class="cons">
+                            <h4>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                                考量
+                            </h4>
+                            <ul>
+                                <li>需要Python环境</li>
+                                <li>视频抽帧功能较弱</li>
+                                <li>JSON文件存储</li>
+                                <li>依赖外部服务</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="summary-card card-b">
+                    <div class="summary-header">
+                        <div class="summary-icon">🎥</div>
+                        <h3>分镜大师 Storyboard</h3>
+                    </div>
+                    <div class="pros-cons">
+                        <div class="pros">
+                            <h4>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                                优势
+                            </h4>
+                            <ul>
+                                <li>本地优先设计</li>
+                                <li>数据完全私有</li>
+                                <li>4种智能抽帧算法</li>
+                                <li>内置FFmpeg</li>
+                                <li>SQLite关系型存储</li>
+                                <li>多AI服务商支持</li>
+                            </ul>
+                        </div>
+                        <div class="cons">
+                            <h4>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                                考量
+                            </h4>
+                            <ul>
+                                <li>仅桌面端</li>
+                                <li>无API接口</li>
+                                <li>需要.NET运行时</li>
+                                <li>无移动端支持</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="use-case-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                使用场景推荐
+            </h2>
+
+            <div class="use-case-grid">
+                <div class="use-case-card">
+                    <h4><span class="use-case-icon">🏢</span> 团队协作</h4>
+                    <p>多人远程协作，需要通过API集成到现有工作流</p>
+                    <div class="recommendation">
+                        <span class="rec-tag a">推荐 智能分镜 Pro</span>
+                    </div>
+                </div>
+
+                <div class="use-case-card">
+                    <h4><span class="use-case-icon">🔒</span> 数据安全优先</h4>
+                    <p>对数据隐私要求高，不希望数据上传云端</p>
+                    <div class="recommendation">
+                        <span class="rec-tag b">推荐 分镜大师</span>
+                    </div>
+                </div>
+
+                <div class="use-case-card">
+                    <h4><span class="use-case-icon">📹</span> 视频素材起点</h4>
+                    <p>从现有视频提取分镜，进行二次创作</p>
+                    <div class="recommendation">
+                        <span class="rec-tag b">推荐 分镜大师</span>
+                    </div>
+                </div>
+
+                <div class="use-case-card">
+                    <h4><span class="use-case-icon">📝</span> 剧本文档起点</h4>
+                    <p>从PDF/Word剧本快速生成分镜</p>
+                    <div class="recommendation">
+                        <span class="rec-tag a">推荐 智能分镜 Pro</span>
+                    </div>
+                </div>
+
+                <div class="use-case-card">
+                    <h4><span class="use-case-icon">📱</span> 移动办公</h4>
+                    <p>需要在手机或平板上查看和编辑分镜</p>
+                    <div class="recommendation">
+                        <span class="rec-tag a">推荐 智能分镜 Pro</span>
+                    </div>
+                </div>
+
+                <div class="use-case-card">
+                    <h4><span class="use-case-icon">🌐</span> 网络不稳定</h4>
+                    <p>工作环境网络不稳定，需要离线工作</p>
+                    <div class="recommendation">
+                        <span class="rec-tag b">推荐 分镜大师</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="conclusion-box">
+            <h3>客观结论</h3>
+            <p>
+                两个项目都是优秀的AI分镜解决方案，各有侧重。<strong>AI 智能分镜 Pro</strong> 更适合需要Web访问、API集成、多端协作的用户；
+                <strong>分镜大师 Storyboard Studio</strong> 更适合注重数据隐私、偏好桌面软件、需要视频抽帧的用户。
+            </p>
+            <p>
+                选择哪个项目取决于您的具体需求：如果您需要灵活的部署方式和API集成能力，选择前者；如果您更看重本地化和数据安全，选择后者。
+            </p>
+        </div>
+
+        <footer>
+            <p>功能特性对比分析 | 生成于 2026-02-03 | 客观公正，仅供参考</p>
+        </footer>
+    </div>
+</body>
+</html>

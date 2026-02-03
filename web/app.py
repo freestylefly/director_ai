@@ -1,5 +1,5 @@
 """
-AI 智能分镜 Pro v2.1 - 专业分镜制作系统
+AI 智能分镜 Pro v2.2 - 专业分镜制作系统
 完整功能版本 - 支持多格式导入导出、批量上传、故事范例
 
 电影剧组专业审核版本:
@@ -39,10 +39,14 @@ from image_generator import create_generator, GenerationResult
 from smart_import import SmartImporter, FileParser, validate_and_fix_json
 from settings import settings, needs_setup
 from setup_wizard import run_wizard
+from canghe_api import CangheAPIClient, VideoModel
 
 
 # 配置 - 从统一设置加载
+# 苍何 API 密钥 (用于云端图像生成)
 API_KEY = settings.api_key
+# 图像生成后端: "canghe" (苍何云端) 或 "comfyui" (本地)
+IMAGE_BACKEND = settings.image_backend
 
 # 使用脚本所在目录作为基础路径，确保路径一致
 BASE_DIR = settings.base_dir
@@ -68,8 +72,321 @@ VIDEO_ASPECT_RATIOS = {
 # 全局状态
 current_project: Optional[StoryboardProject] = None
 
+# 统一苍何 API 配置
+_canghe_unified_config = {
+    "api_key": "",
+    "enabled": True,  # 默认启用苍何 API
+    "llm_enabled": True,  # 文字生成
+    "image_enabled": True,  # 图像生成
+    "video_enabled": True,  # 视频生成
+    "image_model": "nano-banana",  # 图像模型: nano-banana (即梦仅支持视频)
+    "video_model": "veo3.1-fast",  # 视频模型
+}
+
+
+def fuzzy_match_name(target: str, candidates: list, threshold: float = 0.5) -> Optional[Any]:
+    """模糊匹配名称，返回最佳匹配的候选项
+
+    Args:
+        target: 要匹配的目标名称
+        candidates: 候选对象列表（需要有 name 属性）
+        threshold: 最低相似度阈值 (0-1)
+
+    Returns:
+        最佳匹配的候选对象，如果没有匹配则返回 None
+    """
+    if not target or not candidates:
+        return None
+
+    target = target.strip().lower()
+    best_match = None
+    best_score = 0
+
+    for candidate in candidates:
+        cname = candidate.name.strip().lower()
+
+        # 完全匹配
+        if cname == target:
+            return candidate
+
+        # 包含匹配
+        if target in cname or cname in target:
+            score = min(len(target), len(cname)) / max(len(target), len(cname))
+            if score > best_score:
+                best_score = score
+                best_match = candidate
+            continue
+
+        # 简单字符相似度
+        common_chars = set(target) & set(cname)
+        if common_chars:
+            score = len(common_chars) / max(len(set(target)), len(set(cname)))
+            if score > best_score:
+                best_score = score
+                best_match = candidate
+
+    return best_match if best_score >= threshold else None
+
 # 自动保存文件路径
 AUTO_SAVE_FILE = os.path.join(PROJECTS_DIR, "_autosave.json")
+
+# 用户配置文件路径（保存 API Key 等设置）
+USER_CONFIG_FILE = os.path.join(PROJECTS_DIR, "_user_config.json")
+
+
+def save_user_config():
+    """保存用户配置（API Key、模型选择等）"""
+    global API_CONFIG, _canghe_unified_config
+    try:
+        from image_generator import _canghe_api_key, _current_canghe_model
+        from ai_creative_generator import _llm_provider, _llm_api_key
+
+        config = {
+            "canghe_api_key": _canghe_api_key or "",
+            "canghe_model": _current_canghe_model.value if hasattr(_current_canghe_model, 'value') else str(_current_canghe_model),
+            "llm_provider": _llm_provider or "Claude Code CLI (默认)",
+            "llm_api_key": _llm_api_key or "",
+            "image_backend": os.environ.get("IMAGE_BACKEND", "canghe"),
+            "api_config": API_CONFIG,
+            # 统一苍何 API 配置
+            "canghe_unified": _canghe_unified_config
+        }
+
+        with open(USER_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        print(f"[用户配置] 已保存配置")
+        return True
+    except Exception as e:
+        print(f"[用户配置] 保存失败: {e}")
+        return False
+
+
+def load_user_config():
+    """加载用户配置"""
+    global API_CONFIG, IMAGE_BACKEND, API_KEY, _canghe_unified_config
+
+    if not os.path.exists(USER_CONFIG_FILE):
+        print("[用户配置] 配置文件不存在，使用默认设置")
+        return False
+
+    try:
+        with open(USER_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+
+        # 恢复统一苍何 API 配置（优先）
+        saved_unified = config.get("canghe_unified", {})
+        if saved_unified:
+            _canghe_unified_config.update(saved_unified)
+            print(f"[用户配置] 已恢复统一苍何 API 配置")
+
+        # 恢复苍何 API 配置（兼容旧配置）
+        canghe_key = _canghe_unified_config.get("api_key") or config.get("canghe_api_key", "")
+        canghe_model = _canghe_unified_config.get("image_model") or config.get("canghe_model", "nano-banana")
+        if canghe_key:
+            from image_generator import set_canghe_api_key, set_canghe_model
+            set_canghe_api_key(canghe_key)
+            set_canghe_model(canghe_model)
+            API_KEY = canghe_key
+            _canghe_unified_config["api_key"] = canghe_key
+            print(f"[用户配置] 已恢复苍何 API Key")
+
+        # 恢复 LLM 配置 - 如果启用苍何则使用苍何
+        if _canghe_unified_config.get("enabled") and _canghe_unified_config.get("llm_enabled") and canghe_key:
+            from ai_creative_generator import set_llm_config
+            set_llm_config(provider="苍何 API", api_key=canghe_key)
+            print(f"[用户配置] 已恢复 LLM 配置: 苍何 API")
+        else:
+            llm_provider = config.get("llm_provider", "Claude Code CLI (默认)")
+            llm_api_key = config.get("llm_api_key", "")
+            from ai_creative_generator import set_llm_config
+            set_llm_config(provider=llm_provider, api_key=llm_api_key or canghe_key)
+            print(f"[用户配置] 已恢复 LLM 配置: {llm_provider}")
+
+        # 恢复图像后端
+        IMAGE_BACKEND = config.get("image_backend", "canghe")
+
+        # 恢复 API_CONFIG
+        saved_api_config = config.get("api_config", {})
+        if saved_api_config:
+            API_CONFIG.update(saved_api_config)
+
+        print(f"[用户配置] 配置加载完成")
+        return config
+    except Exception as e:
+        print(f"[用户配置] 加载失败: {e}")
+        return False
+
+
+def get_saved_config():
+    """获取保存的配置用于 UI 初始化"""
+    if not os.path.exists(USER_CONFIG_FILE):
+        return {}
+    try:
+        with open(USER_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def get_saved_canghe_api_key():
+    """获取保存的苍何 API Key"""
+    config = get_saved_config()
+    return config.get("canghe_api_key", "") or (settings.api_key if settings.api_key != "your_api_key_here" else "")
+
+
+def get_saved_canghe_model():
+    """获取保存的苍何模型选择"""
+    config = get_saved_config()
+    model = config.get("canghe_model", "nano-banana")
+    if "jimeng" in model.lower():
+        return "即梦 (Jimeng)"
+    return "Nano-Banana (Google Imagen)"
+
+
+def get_saved_canghe_model_v2():
+    """获取保存的苍何图像模型选择 (v2 - 支持 DALL-E 3)"""
+    config = get_saved_config()
+    model = config.get("canghe_image_model", config.get("canghe_model", "nano-banana"))
+    model_lower = model.lower()
+    if "dall" in model_lower or "dalle" in model_lower:
+        return "DALL-E 3"
+    else:
+        return "Nano-Banana (默认)"
+
+
+def apply_image_model(model_choice: str):
+    """应用图像生成模型选择"""
+    from image_generator import set_canghe_model
+
+    # 映射 UI 选项到内部模型名
+    model_map = {
+        "Nano-Banana (默认)": "nano-banana",
+        "DALL-E 3": "dall-e-3",
+    }
+
+    model_name = model_map.get(model_choice, "nano-banana")
+
+    # 设置模型
+    set_canghe_model(model_name)
+
+    # 保存到配置
+    config = get_saved_config()
+    config["canghe_image_model"] = model_name
+    save_config(config)
+
+    # 返回状态
+    status_emoji = {"nano-banana": "🍌", "dall-e-3": "🎨"}
+    return f"{status_emoji.get(model_name, '✅')} 已切换到 {model_choice}"
+
+
+def get_saved_llm_provider():
+    """获取保存的 LLM 提供商"""
+    config = get_saved_config()
+    return config.get("llm_provider", "Claude Code CLI (默认)")
+
+
+def get_saved_image_backend():
+    """获取保存的图像后端"""
+    config = get_saved_config()
+    backend = config.get("image_backend", "canghe")
+    if backend == "comfyui":
+        return "本地 ComfyUI"
+    return "苍何 API (云端)"
+
+
+def get_saved_unified_config():
+    """获取保存的统一苍何 API 配置"""
+    config = get_saved_config()
+    saved = config.get("canghe_unified", {})
+    # 合并默认值
+    default = {
+        "api_key": config.get("canghe_api_key", ""),
+        "enabled": True,
+        "llm_enabled": True,
+        "image_enabled": True,
+        "video_enabled": True,
+        "image_model": "nano-banana",  # 即梦仅支持视频
+        "video_model": "veo3.1-fast",
+    }
+    default.update(saved)
+    return default
+
+
+def save_unified_canghe_config(api_key: str, llm_enabled: bool, image_enabled: bool,
+                                video_enabled: bool, image_model: str, video_model: str) -> str:
+    """保存统一苍何 API 配置"""
+    global _canghe_unified_config, API_KEY
+
+    if not api_key or not api_key.strip():
+        return "❌ 请输入苍何 API Key"
+
+    api_key = api_key.strip()
+
+    # 更新全局配置
+    _canghe_unified_config = {
+        "api_key": api_key,
+        "enabled": True,
+        "llm_enabled": llm_enabled,
+        "image_enabled": image_enabled,
+        "video_enabled": video_enabled,
+        "image_model": "jimeng" if "即梦" in image_model else "nano-banana",
+        "video_model": video_model,
+    }
+
+    # 更新图像生成器
+    from image_generator import set_canghe_api_key, set_canghe_model
+    set_canghe_api_key(api_key)
+    set_canghe_model(_canghe_unified_config["image_model"])
+    API_KEY = api_key
+
+    # 更新 LLM
+    if llm_enabled:
+        from ai_creative_generator import set_llm_config
+        set_llm_config(provider="苍何 API", api_key=api_key)
+
+    # 保存到文件
+    save_user_config()
+
+    status_parts = []
+    if llm_enabled:
+        status_parts.append("文字")
+    if image_enabled:
+        status_parts.append("图像")
+    if video_enabled:
+        status_parts.append("视频")
+
+    return f"✅ 苍何 API 配置已保存！已启用: {', '.join(status_parts)}"
+
+
+def get_canghe_api_status() -> str:
+    """获取苍何 API 状态显示"""
+    config = get_saved_unified_config()
+    api_key = config.get("api_key", "")
+
+    if not api_key:
+        return """
+        <div class="canghe-status canghe-status-error">
+            <span class="status-icon">⚠️</span>
+            <span>未配置 API Key</span>
+        </div>
+        """
+
+    enabled_services = []
+    if config.get("llm_enabled"):
+        enabled_services.append("文字")
+    if config.get("image_enabled"):
+        enabled_services.append("图像")
+    if config.get("video_enabled"):
+        enabled_services.append("视频")
+
+    key_preview = f"***{api_key[-8:]}" if len(api_key) > 8 else "***"
+
+    return f"""
+    <div class="canghe-status canghe-status-ok">
+        <span class="status-icon">✅</span>
+        <span>已连接 ({key_preview}) | 启用: {', '.join(enabled_services) if enabled_services else '无'}</span>
+    </div>
+    """
 
 
 def auto_save_project() -> bool:
@@ -500,7 +817,7 @@ def auto_connect_comfyui() -> bool:
         return False
 
 
-# 注意: auto_connect_comfyui() 在 main 中调用，避免模块加载时的函数定义顺序问题
+# 注意: auto_connect_comfyui() 会在应用启动后调用，见文件末尾
 
 
 # ========================================
@@ -842,6 +1159,17 @@ def generate_story_from_idea(story_idea: str):
     """
     global current_project
     import re
+    import time
+
+    # [DEBUG] 记录每次调用
+    timestamp = time.strftime("%H:%M:%S")
+    print(f"\n{'='*60}")
+    print(f"[{timestamp}] generate_story_from_idea 被调用")
+    print(f"[DEBUG] 输入内容: {repr(story_idea[:100] if story_idea else None)}")
+    print(f"{'='*60}\n", flush=True)
+
+    # CLI 实时输出
+    cli_output_history.append(f"[{timestamp}] 开始生成故事: {story_idea[:30]}...")
 
     empty_return = (
         "请输入故事创意",
@@ -851,18 +1179,43 @@ def generate_story_from_idea(story_idea: str):
         "电影感", "", "",
         get_workflow_indicator(0),
         "", "", "",
-        '<div class="no-shots">暂无镜头</div>'
+        '<div class="no-shots">暂无镜头</div>',
+        # 新增：输入框默认值
+        "", "",  # char_name, char_desc
+        "", "",  # scene_name, scene_desc
+        "", gr.update(value=None)  # shot_desc, shot_template
     )
 
     if not story_idea or not story_idea.strip():
         return empty_return
 
     try:
+        # 强制从配置文件加载苍何 API 设置
+        from ai_creative_generator import get_llm_config, set_llm_config
+        llm_config = get_llm_config()
+        print(f"[一句话生成] 初始 LLM 配置: provider={llm_config.get('provider')}, has_key={bool(llm_config.get('api_key'))}")
+
+        # 直接从配置文件读取苍何 API key
+        saved_config = get_saved_unified_config()
+        canghe_key = saved_config.get("api_key", "")
+        llm_enabled = saved_config.get("llm_enabled", True)
+
+        print(f"[一句话生成] 配置文件: has_key={bool(canghe_key)}, llm_enabled={llm_enabled}")
+
+        # 如果配置了苍何 API key 且启用了 LLM，强制使用苍何 API
+        if canghe_key and llm_enabled:
+            set_llm_config(provider="苍何 API", api_key=canghe_key)
+            print(f"[一句话生成] 已强制配置 LLM 为苍何 API")
+        elif not canghe_key:
+            print(f"[一句话生成] 警告: 苍何 API Key 未配置，将使用 Claude CLI 或 fallback")
+
         # 使用 AI 服务分析故事
+        cli_output_history.append("[AI 分析] 正在调用 AI 服务...")
         service = get_ai_service()
         result = service.analyze_story(story_idea.strip())
 
         if not result.get("success"):
+            cli_output_history.append(f"[AI 分析] ✗ 失败: {result.get('message', '未知错误')[:50]}")
             return (
                 f"AI 分析失败: {result.get('message', '未知错误')}",
                 "", "", [], [], [],
@@ -871,7 +1224,11 @@ def generate_story_from_idea(story_idea: str):
                 "电影感", "", "",
                 get_workflow_indicator(0),
                 "", "", "",
-                '<div class="no-shots">暂无镜头</div>'
+                '<div class="no-shots">暂无镜头</div>',
+                # 新增：输入框默认值
+                "", "",  # char_name, char_desc
+                "", "",  # scene_name, scene_desc
+                "", gr.update(value=None)  # shot_desc, shot_template
             )
 
         # 从分析结果创建项目
@@ -881,8 +1238,27 @@ def generate_story_from_idea(story_idea: str):
             aspect_ratio="16:9"
         )
 
-        # 设置风格
-        style_name = "电影感"
+        # 设置风格 - 根据 AI 返回的 style 动态设置
+        ai_style = result.get("style", "")
+        style_map = {
+            "2D卡通": "2D卡通",
+            "卡通": "2D卡通",
+            "Q萌": "2D卡通",
+            "可爱": "2D卡通",
+            "动漫": "日系动漫",
+            "日系": "日系动漫",
+            "写实": "电影感",
+            "电影": "电影感",
+            "电影感": "电影感",
+            "水彩": "水彩画",
+            "油画": "油画",
+        }
+        # 根据 AI 返回的风格关键词匹配
+        style_name = "电影感"  # 默认
+        for key, value in style_map.items():
+            if key in ai_style:
+                style_name = value
+                break
         set_style(style_name)
 
         # 添加角色
@@ -921,29 +1297,55 @@ def generate_story_from_idea(story_idea: str):
                 template_type = template_map.get(template_name, ShotTemplate.T4_STANDARD_MEDIUM)
                 template_def = get_template(template_type)
 
-                # 查找角色ID
+                # 查找角色ID - 使用模糊匹配
                 char_ids = []
                 for cname in shot_data.get("characters", []):
+                    # 先尝试精确匹配
+                    found = False
                     for c in current_project.characters:
-                        if c.name == cname:
+                        if c.name.strip() == cname.strip():
                             char_ids.append(c.id)
+                            found = True
                             break
+                    # 如果精确匹配失败，使用模糊匹配
+                    if not found:
+                        matched = fuzzy_match_name(cname, current_project.characters, threshold=0.4)
+                        if matched:
+                            char_ids.append(matched.id)
 
-                # 查找场景ID
+                # 查找场景ID - 使用模糊匹配
                 scene_id = ""
                 scene_name = shot_data.get("scene", "")
+                # 先尝试精确匹配
                 for s in current_project.scenes:
-                    if s.name == scene_name:
+                    if s.name.strip() == scene_name.strip():
                         scene_id = s.id
                         break
+                # 如果精确匹配失败，使用模糊匹配
+                if not scene_id and scene_name:
+                    matched_scene = fuzzy_match_name(scene_name, current_project.scenes, threshold=0.4)
+                    if matched_scene:
+                        scene_id = matched_scene.id
+                # 如果仍然没有匹配，使用第一个场景（比循环分配更合理）
                 if not scene_id and current_project.scenes:
-                    scene_id = current_project.scenes[i % len(current_project.scenes)].id
+                    scene_id = current_project.scenes[0].id
+
+                # 如果没有匹配到角色，尝试从镜头描述中智能匹配
+                if not char_ids and current_project.characters:
+                    shot_desc = shot_data.get("description", "")
+                    # 尝试在描述中找到角色名
+                    for c in current_project.characters:
+                        if c.name in shot_desc:
+                            char_ids.append(c.id)
+                    # 如果仍然没有，使用主角（第一个角色）
+                    if not char_ids:
+                        char_ids = [current_project.characters[0].id]
 
                 shot = Shot(
                     shot_number=i + 1,
                     template=template_type,
                     description=shot_data.get("description", f"镜头 {i+1}"),
-                    characters_in_shot=char_ids if char_ids else [c.id for c in current_project.characters[:2]],
+                    characters_in_shot=char_ids,
                     scene_id=scene_id,
                     camera=template_def.camera if template_def else CameraSettings(),
                     composition=template_def.composition if template_def else CompositionSettings(),
@@ -1002,6 +1404,22 @@ def generate_story_from_idea(story_idea: str):
         # 自动保存
         auto_save_project()
 
+        # 调试日志 & CLI 输出
+        cli_output_history.append(f"[AI 分析] ✓ 成功! 角色:{char_count} 场景:{scene_count} 镜头:{shot_count}")
+        print(f"[一句话生成] 成功! 项目: {project_name}")
+        print(f"[一句话生成] 角色: {char_count}, 场景: {scene_count}, 镜头: {shot_count}")
+        print(f"[一句话生成] 角色列表: {get_character_list()}")
+        print(f"[一句话生成] 场景列表: {get_scene_list()}")
+        print(f"[一句话生成] 镜头列表: {len(get_shot_list())} 条")
+
+        # 获取第一个角色/场景/镜头的信息用于填充输入框
+        first_char_name = current_project.characters[0].name if current_project.characters else ""
+        first_char_desc = current_project.characters[0].description if current_project.characters else ""
+        first_scene_name = current_project.scenes[0].name if current_project.scenes else ""
+        first_scene_desc = current_project.scenes[0].description if current_project.scenes else ""
+        first_shot_desc = current_project.shots[0].description if current_project.shots else ""
+        first_shot_template = current_project.shots[0].template.value if current_project.shots else None
+
         return (
             f"[OK] 已生成「{project_name}」- {char_count}角色, {scene_count}场景, {shot_count}镜头",
             get_project_summary(),
@@ -1020,11 +1438,17 @@ def generate_story_from_idea(story_idea: str):
             get_step_summary(2),
             get_step_summary(3),
             get_step_summary(4),
-            get_shot_cards_html()
+            get_shot_cards_html(),
+            # 新增：填充输入框
+            first_char_name, first_char_desc,
+            first_scene_name, first_scene_desc,
+            first_shot_desc, gr.update(value=first_shot_template)
         )
 
     except Exception as e:
         print(f"[一句话生成] 错误: {e}")
+        import traceback
+        traceback.print_exc()
         return (
             f"生成失败: {str(e)[:100]}",
             "", "", [], [], [],
@@ -1033,7 +1457,11 @@ def generate_story_from_idea(story_idea: str):
             "电影感", "", "",
             get_workflow_indicator(0),
             "", "", "",
-            '<div class="no-shots">暂无镜头</div>'
+            '<div class="no-shots">暂无镜头</div>',
+            # 新增：输入框默认值
+            "", "",  # char_name, char_desc
+            "", "",  # scene_name, scene_desc
+            "", gr.update(value=None)  # shot_desc, shot_template
         )
 
 
@@ -1049,7 +1477,11 @@ def load_example_story(story_name: str):
             "2D卡通", "", "",
             get_workflow_indicator(0),
             "", "", "",  # step summaries
-            '<div class="no-shots">暂无镜头</div>'  # shot_cards_html
+            '<div class="no-shots">暂无镜头</div>',  # shot_cards_html
+            # 新增：输入框默认值
+            "", "",  # char_name, char_desc
+            "", "",  # scene_name, scene_desc
+            "", gr.update(value=None)  # shot_desc, shot_template
         )
 
     example = EXAMPLE_STORIES[story_name]
@@ -1097,6 +1529,13 @@ def load_example_story(story_name: str):
                     first_generated_prompt = first_shot.generated_prompt or ""
 
                 status_msg = f"✓ 已恢复项目「{saved_name}」- {valid_images} 张图片, {valid_videos} 个视频"
+                # 获取第一个角色/场景/镜头的信息
+                first_char_name = current_project.characters[0].name if current_project.characters else ""
+                first_char_desc = current_project.characters[0].description if current_project.characters else ""
+                first_scene_name = current_project.scenes[0].name if current_project.scenes else ""
+                first_scene_desc = current_project.scenes[0].description if current_project.scenes else ""
+                first_shot_desc = current_project.shots[0].description if current_project.shots else ""
+                first_shot_template = current_project.shots[0].template.value if current_project.shots else None
                 return (
                     status_msg,
                     get_project_summary(),
@@ -1111,7 +1550,11 @@ def load_example_story(story_name: str):
                     get_step_summary(2),
                     get_step_summary(3),
                     get_step_summary(4),
-                    get_shot_cards_html()
+                    get_shot_cards_html(),
+                    # 新增：填充输入框
+                    first_char_name, first_char_desc,
+                    first_scene_name, first_scene_desc,
+                    first_shot_desc, gr.update(value=first_shot_template)
                 )
         except Exception as e:
             print(f"[加载范例] 恢复失败，创建新项目: {e}")
@@ -1206,6 +1649,14 @@ def load_example_story(story_name: str):
     # 自动保存
     auto_save_project()
 
+    # 获取第一个角色/场景/镜头的信息用于填充输入框
+    first_char_name = current_project.characters[0].name if current_project.characters else ""
+    first_char_desc = current_project.characters[0].description if current_project.characters else ""
+    first_scene_name = current_project.scenes[0].name if current_project.scenes else ""
+    first_scene_desc = current_project.scenes[0].description if current_project.scenes else ""
+    first_shot_desc = current_project.shots[0].description if current_project.shots else ""
+    first_shot_template = current_project.shots[0].template.value if current_project.shots else None
+
     return (
         f"✓ 已加载范例「{story_name}」- 角色/场景/镜头已自动创建，请进入【③ 生成】生成图像",
         get_project_summary(),
@@ -1224,7 +1675,11 @@ def load_example_story(story_name: str):
         get_step_summary(2),  # step2_summary
         get_step_summary(3),  # step3_summary
         get_step_summary(4),  # step4_summary
-        get_shot_cards_html()  # shot_cards_html - 镜头卡片
+        get_shot_cards_html(),  # shot_cards_html - 镜头卡片
+        # 新增：填充输入框
+        first_char_name, first_char_desc,
+        first_scene_name, first_scene_desc,
+        first_shot_desc, gr.update(value=first_shot_template)
     )
 
 
@@ -1461,16 +1916,15 @@ def add_shot_simple(
 
 def generate_single_shot(shot_num: int, custom_prompt: str = "") -> Tuple[str, Optional[str]]:
     """生成单个镜头"""
-    global current_project
-    print(f"[生成] generate_single_shot 调用: shot_num={shot_num}")
+    global current_project, cli_output_history
 
     if current_project is None:
-        print("[生成] 错误: 没有项目")
+        cli_output_history.append("[图像生成] ✗ 错误: 请先创建项目")
         return "请先创建项目", None
 
     idx = int(shot_num) - 1
     if idx < 0 or idx >= len(current_project.shots):
-        print(f"[生成] 错误: 无效镜头编号 {shot_num}, 总共 {len(current_project.shots)} 个镜头")
+        cli_output_history.append(f"[图像生成] ✗ 错误: 无效的镜头编号 {shot_num}")
         return "无效的镜头编号", None
 
     shot = current_project.shots[idx]
@@ -1480,83 +1934,81 @@ def generate_single_shot(shot_num: int, custom_prompt: str = "") -> Tuple[str, O
         prompt = generate_shot_prompt(shot, current_project)
         shot.generated_prompt = prompt
 
-    print(f"[生成] 使用生成器, API_KEY={'有' if API_KEY else '无'}, 输出目录={OUTPUTS_DIR}")
-    generator = create_generator(API_KEY, str(OUTPUTS_DIR))
-    print(f"[生成] 生成器类型: {type(generator).__name__}")
+    # 检查 API Key
+    effective_api_key = API_KEY
+    if _canghe_unified_config.get("enabled") and _canghe_unified_config.get("image_enabled"):
+        effective_api_key = _canghe_unified_config.get("api_key", "")
+
+    if not effective_api_key or effective_api_key == "your_api_key_here":
+        cli_output_history.append("[图像生成] ✗ 错误: API Key 未配置，请在设置中配置苍何 API Key")
+        return "API Key 未配置，请先在设置中配置", None
+
+    cli_output_history.append(f"[图像生成] 开始生成镜头 {shot_num}...")
+    cli_output_history.append(f"[图像生成] 使用 API: {'苍何统一' if _canghe_unified_config.get('enabled') else '默认'}")
+    cli_output_history.append(f"[图像生成] 图像模型: {_canghe_unified_config.get('image_model', 'nano-banana')}")
+    cli_output_history.append(f"[图像生成] API Key: {effective_api_key[:10]}...{effective_api_key[-4:] if len(effective_api_key) > 14 else ''}")
+    cli_output_history.append(f"[图像生成] 提示词: {prompt[:60]}...")
+
+    try:
+        generator = create_generator(effective_api_key, str(OUTPUTS_DIR))
+    except ValueError as e:
+        cli_output_history.append(f"[图像生成] ✗ 创建生成器失败: {str(e)}")
+        return f"创建生成器失败: {str(e)}", None
+
+    print(f"[DEBUG] 开始生成镜头 {shot_num}, prompt: {prompt[:50]}...")
     result = generator.generate_shot(shot, current_project, prompt)
-    print(f"[生成] 结果: success={result.success}, path={result.image_path}, error={result.error_message}")
+    print(f"[DEBUG] 生成结果: success={result.success}, path={result.image_path}, error={result.error_message}")
 
     if result.success:
+        cli_output_history.append(f"[图像生成] ✓ 镜头 {shot_num} 生成成功: {result.image_path}")
+        print(f"[DEBUG] 设置 shot.output_image = {result.image_path}")
         shot.output_image = result.image_path
         shot.consistency_score = result.consistency_score
+        # 验证文件是否存在
+        import os
+        file_exists = os.path.exists(result.image_path)
+        print(f"[DEBUG] 文件存在: {file_exists}")
+        cli_output_history.append(f"[图像生成] 文件路径: {result.image_path}, 存在: {file_exists}")
         auto_save_project()  # 自动保存
         return f"✓ 镜头 {shot_num} 生成完成", result.image_path
     else:
+        cli_output_history.append(f"[图像生成] ✗ 镜头 {shot_num} 失败: {result.error_message}")
+        print(f"[DEBUG] 生成失败: {result.error_message}")
         return f"生成失败: {result.error_message}", None
 
 
 def generate_all_shots() -> str:
-    """批量生成所有镜头 - 优先使用 ComfyUI 工作流"""
+    """批量生成所有镜头"""
     global current_project
 
     if current_project is None:
-        return "请先创建项目"
+        return "请先创建项目", []
 
     if not current_project.shots:
-        return "请先添加镜头"
+        return "请先添加镜头", []
 
-    print(f"[全部生成] 开始生成, 共 {len(current_project.shots)} 个镜头", flush=True)
-
-    # 检查 ComfyUI 是否可用
-    service = get_ai_service()
-    use_comfyui = service.comfyui_client is not None
-    print(f"[全部生成] 使用 ComfyUI 工作流: {use_comfyui}", flush=True)
-
+    generator = create_generator(API_KEY, str(OUTPUTS_DIR))
     success = 0
     total = len(current_project.shots)
+    cli_output_history.append(f"[批量生成] 开始生成 {total} 个镜头...")
 
     for i, shot in enumerate(current_project.shots):
-        # Check if image exists - if path is set but file doesn't exist, regenerate
-        image_exists = shot.output_image and os.path.exists(shot.output_image)
-        print(f"[全部生成] 处理镜头 {i+1}/{total}, output_image='{shot.output_image}', exists={image_exists}", flush=True)
-
-        if not image_exists:
-            # Clear invalid path
-            if shot.output_image and not os.path.exists(shot.output_image):
-                print(f"[全部生成] 镜头 {i+1} 图片文件不存在，重新生成", flush=True)
-                shot.output_image = ""
-
+        if not shot.output_image:
             if not shot.generated_prompt:
                 shot.generated_prompt = generate_shot_prompt(shot, current_project)
-            print(f"[全部生成] 生成镜头 {i+1}, prompt长度={len(shot.generated_prompt)}", flush=True)
 
-            if use_comfyui:
-                # 使用 ComfyUI 工作流直接生成
-                gen_success, image_path, error_msg = generate_image_with_comfyui(
-                    shot, current_project, shot.generated_prompt
-                )
-                print(f"[全部生成] 镜头 {i+1} 结果: success={gen_success}, error={error_msg}", flush=True)
-                if gen_success and image_path:
-                    shot.output_image = image_path
-                    shot.consistency_score = 0.9
-                    success += 1
-                    print(f"[全部生成] 镜头 {i+1} 保存到: {image_path}", flush=True)
+            cli_output_history.append(f"[批量生成] 正在生成镜头 {i+1}/{total}...")
+            result = generator.generate_shot(shot, current_project, shot.generated_prompt)
+            if result.success:
+                shot.output_image = result.image_path
+                shot.consistency_score = result.consistency_score
+                success += 1
+                cli_output_history.append(f"[批量生成] ✓ 镜头 {i+1} 完成")
             else:
-                # 回退到旧的生成器
-                generator = create_generator(API_KEY, str(OUTPUTS_DIR))
-                result = generator.generate_shot(shot, current_project, shot.generated_prompt)
-                print(f"[全部生成] 镜头 {i+1} 结果: success={result.success}, error={result.error_message}", flush=True)
-                if result.success:
-                    shot.output_image = result.image_path
-                    shot.consistency_score = result.consistency_score
-                    success += 1
-                    print(f"[全部生成] 镜头 {i+1} 保存到: {result.image_path}", flush=True)
-        else:
-            print(f"[全部生成] 镜头 {i+1} 已有图片，跳过", flush=True)
-            success += 1  # Count existing images as success
+                cli_output_history.append(f"[批量生成] ✗ 镜头 {i+1} 失败")
 
     auto_save_project()  # 自动保存
-    print(f"[全部生成] 完成, 成功 {success}/{total}", flush=True)
+    cli_output_history.append(f"[批量生成] 完成: {success}/{total} 个镜头成功")
     return f"✓ 已生成 {success}/{total} 个镜头"
 
 
@@ -1607,135 +2059,139 @@ def get_seed_settings() -> Tuple[bool, int]:
 
 
 # ========================================
-# ComfyUI 图片生成功能 (使用工作流文件)
-# ========================================
-IMAGE_WORKFLOW_FILE = "workflows/img.json"
-
-# 图片尺寸映射
-IMAGE_ASPECT_RATIOS = {
-    "16:9": (1024, 576),
-    "9:16": (576, 1024),
-    "1:1": (768, 768),
-    "4:3": (896, 672),
-    "3:4": (672, 896),
-    "21:9": (1024, 440),
-}
-
-def generate_image_with_comfyui(
-    shot: 'Shot',
-    project: 'StoryboardProject',
-    prompt: str
-) -> Tuple[bool, Optional[str], str]:
-    """
-    使用 ComfyUI 工作流生成图片
-
-    Returns:
-        Tuple of (success, image_path, error_message)
-    """
-    import time
-
-    try:
-        service = get_ai_service()
-
-        if not service.comfyui_client:
-            return False, None, "ComfyUI 未连接"
-
-        # 加载图片工作流
-        workflow_path = Path(__file__).parent / IMAGE_WORKFLOW_FILE
-        if not workflow_path.exists():
-            return False, None, f"工作流文件不存在: {IMAGE_WORKFLOW_FILE}"
-
-        with open(workflow_path, 'r', encoding='utf-8') as f:
-            workflow = json.load(f)
-
-        # 获取种子
-        if project.lock_seed and project.generation_seed > 0:
-            seed = project.generation_seed
-        else:
-            seed = int(time.time() * 1000) % (2**32)
-            if project.lock_seed:
-                project.generation_seed = seed
-
-        # 设置提示词 (节点 111 - PrimitiveStringMultiline)
-        if "111" in workflow:
-            workflow["111"]["inputs"]["value"] = prompt
-            print(f"[ComfyUI图片] 设置提示词: {prompt[:50]}...", flush=True)
-
-        # 设置种子 (节点 60 - KSampler)
-        if "60" in workflow:
-            workflow["60"]["inputs"]["seed"] = seed
-            print(f"[ComfyUI图片] 设置种子: {seed}", flush=True)
-
-        # 设置图片尺寸 (节点 69 - EmptyFlux2LatentImage)
-        project_aspect = project.aspect_ratio if project else "16:9"
-        width, height = IMAGE_ASPECT_RATIOS.get(project_aspect, (1024, 576))
-        if "69" in workflow:
-            workflow["69"]["inputs"]["width"] = width
-            workflow["69"]["inputs"]["height"] = height
-            print(f"[ComfyUI图片] 设置尺寸: {width}x{height}", flush=True)
-
-        # 提交任务
-        print(f"[ComfyUI图片] 提交任务...", flush=True)
-        success, prompt_id = service.comfyui_client.queue_prompt(workflow)
-        if not success:
-            return False, None, f"提交任务失败: {prompt_id}"
-
-        print(f"[ComfyUI图片] 任务ID: {prompt_id}, 等待生成...", flush=True)
-
-        # 等待完成
-        def progress_cb(current, total):
-            pass
-
-        wait_success, outputs = service.comfyui_client.wait_for_completion(prompt_id, progress_cb)
-
-        if not wait_success:
-            error_msg = outputs[0] if outputs else "未知错误"
-            return False, None, f"生成失败: {error_msg}"
-
-        print(f"[ComfyUI图片] 生成完成, 输出: {outputs}", flush=True)
-
-        # 获取输出图片
-        image_path = None
-        if outputs:
-            for output_file in outputs:
-                if output_file.endswith(('.png', '.jpg', '.jpeg', '.webp')):
-                    # 从 ComfyUI 下载图片
-                    if '/' in output_file:
-                        subfolder, filename = output_file.rsplit('/', 1)
-                    else:
-                        subfolder, filename = "", output_file
-
-                    print(f"[ComfyUI图片] 下载: subfolder={subfolder}, filename={filename}", flush=True)
-                    image_data = service.comfyui_client.get_image(filename, subfolder=subfolder, folder_type="output")
-
-                    if image_data:
-                        # 保存到项目目录
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        dest_filename = f"shot_{shot.shot_number:03d}_{timestamp}.png"
-                        dest_dir = OUTPUTS_DIR / project.name
-                        dest_dir.mkdir(parents=True, exist_ok=True)
-                        dest_path = dest_dir / dest_filename
-
-                        with open(dest_path, 'wb') as f:
-                            f.write(image_data)
-
-                        image_path = str(dest_path)
-                        print(f"[ComfyUI图片] 保存到: {image_path}", flush=True)
-                        break
-
-        if image_path:
-            return True, image_path, ""
-        else:
-            return False, None, "未能获取生成的图片"
-
-    except Exception as e:
-        return False, None, f"生成异常: {str(e)}"
-
-
-# ========================================
 # 视频生成功能
 # ========================================
 VIDEO_WORKFLOW_FILE = "workflows/video.json"
+
+
+def generate_video_with_canghe_api(
+    shot,
+    project,
+    prompt: str,
+    model: str = "veo3.1-fast",
+    gen_mode: str = "文生视频",
+    log_lines: list = None
+) -> Tuple[bool, Optional[str], str]:
+    """
+    使用苍何 API 生成视频
+
+    Args:
+        shot: 镜头对象
+        project: 项目对象
+        prompt: 提示词
+        model: 视频模型
+        gen_mode: 生成模式 ("文生视频" 或 "图生视频")
+        log_lines: 日志列表
+
+    Returns:
+        (success, video_path, error_message)
+    """
+    import asyncio
+    import httpx
+
+    if log_lines is None:
+        log_lines = []
+
+    print(f"[视频生成] 开始调用苍何 API...")
+    cli_output_history.append(f"[视频生成] 开始调用苍何 API, 模型: {model}")
+
+    config = get_saved_unified_config()
+    api_key = config.get("api_key", "")
+    print(f"[视频生成] 配置: api_key={'已配置' if api_key else '未配置'}, video_enabled={config.get('video_enabled')}")
+
+    if not api_key:
+        return False, None, "苍何 API Key 未配置"
+
+    if not config.get("video_enabled", True):
+        return False, None, "苍何视频生成未启用"
+
+    log_lines.append(f"> [苍何 API] 使用模型: {model}")
+
+    try:
+        client = CangheAPIClient(api_key)
+
+        # 准备图片 URL (图生视频模式)
+        images = None
+        if gen_mode == "图生视频" and shot.output_image and os.path.exists(shot.output_image):
+            # 需要将本地图片上传或转换为 URL
+            # 这里先使用 base64 data URL (部分 API 支持)
+            log_lines.append(f"> [苍何 API] 图生视频模式，源图片: {shot.output_image}")
+            # 注意：实际使用时可能需要先上传图片获取 URL
+            # 这里假设 API 支持 base64 或需要图片 URL
+            # images = [shot.output_image]  # 如果 API 支持本地路径
+
+        # 获取宽高比
+        aspect_ratio = project.aspect_ratio if project else "16:9"
+        log_lines.append(f"> [苍何 API] 宽高比: {aspect_ratio}")
+
+        # 调用视频生成
+        log_lines.append(f"> [苍何 API] 正在生成视频，请稍候...")
+
+        async def _generate():
+            if "jimeng" in model.lower():
+                # 使用即梦视频
+                return await client.create_jimeng_video_unified(
+                    prompt=prompt,
+                    aspect_ratio=aspect_ratio.replace(":", ":"),
+                    images=images
+                )
+            else:
+                # 使用 VEO 视频
+                return await client.create_video(
+                    prompt=prompt,
+                    model=model,
+                    images=images,
+                    enhance_prompt=True,
+                    aspect_ratio=aspect_ratio
+                )
+
+        # 运行异步任务
+        print(f"[视频生成] 正在调用 API，请等待...")
+        cli_output_history.append(f"[视频生成] 正在调用 API，请等待...")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(_generate())
+            print(f"[视频生成] API 返回: {result}")
+        finally:
+            loop.close()
+
+        if result and result.video_url:
+            log_lines.append(f"> [苍何 API] ✓ 视频生成成功")
+            log_lines.append(f"> [苍何 API] 视频 URL: {result.video_url[:80]}...")
+            cli_output_history.append(f"[视频生成] ✓ 视频生成成功")
+            print(f"[视频生成] ✓ 视频 URL: {result.video_url[:80]}...")
+
+            # 下载视频到本地
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            if shot.output_image:
+                video_path = os.path.splitext(shot.output_image)[0] + f"_{model.replace('.', '_')}.mp4"
+            else:
+                video_dir = OUTPUTS_DIR / (project.name if project else "default")
+                video_dir.mkdir(parents=True, exist_ok=True)
+                video_path = str(video_dir / f"shot_{shot.shot_number:03d}_{timestamp}.mp4")
+
+            log_lines.append(f"> [苍何 API] 正在下载视频...")
+            response = httpx.get(result.video_url, timeout=120.0, follow_redirects=True)
+            if response.status_code == 200:
+                with open(video_path, 'wb') as f:
+                    f.write(response.content)
+                log_lines.append(f"> [苍何 API] ✓ 视频已保存: {video_path}")
+                return True, video_path, ""
+            else:
+                return False, None, f"下载视频失败: HTTP {response.status_code}"
+        else:
+            return False, None, "视频生成返回空结果"
+
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        log_lines.append(f"> [苍何 API] ✗ 生成失败: {error_msg}")
+        print(f"[视频生成] ✗ 异常: {error_msg}")
+        print(f"[视频生成] 堆栈: {traceback.format_exc()}")
+        cli_output_history.append(f"[视频生成] ✗ 失败: {error_msg[:100]}")
+        return False, None, error_msg
+
 
 def generate_video_from_shot(
     shot_num: int,
@@ -1747,8 +2203,8 @@ def generate_video_from_shot(
     prop_refs,
     scene_ref
 ) -> Tuple[str, Optional[str]]:
-    """生成单个镜头的视频片段"""
-    global current_project
+    """生成单个镜头的视频片段 - 优先使用苍何 API"""
+    global current_project, _canghe_unified_config
 
     log_lines = []
     log_lines.append(f"> [视频生成] 开始处理镜头 {shot_num}")
@@ -1771,6 +2227,61 @@ def generate_video_from_shot(
     if gen_mode == "图生视频" and not shot.output_image:
         log_lines.append(f"> [错误] 镜头 {shot_num} 还没有生成图片，请先生成图片")
         return "\n".join(log_lines), None
+
+    # 构建提示词
+    prompt_text = shot.generated_prompt or shot.description or ""
+
+    # 风格关键字映射
+    style_prompts = {
+        "电影感": "cinematic lighting, film grain, dramatic atmosphere",
+        "动漫风": "anime style, vibrant colors, cel shading",
+        "写实风": "photorealistic, natural lighting, high detail",
+        "赛博朋克": "cyberpunk, neon lights, futuristic, sci-fi"
+    }
+    camera_prompts = {
+        "静止": "static shot",
+        "缓慢推进": "slow zoom in, dolly in",
+        "缓慢拉远": "slow zoom out, dolly out",
+        "左右平移": "horizontal pan, tracking shot",
+        "跟随主体": "follow shot, tracking the subject"
+    }
+
+    style_addition = style_prompts.get(style, '')
+    camera_addition = camera_prompts.get(camera, '')
+    full_prompt = ", ".join(filter(None, [prompt_text, style_addition, camera_addition]))
+
+    log_lines.append(f"> [提示词] {full_prompt[:80]}..." if len(full_prompt) > 80 else f"> [提示词] {full_prompt}")
+
+    # ===== 优先使用苍何 API =====
+    config = get_saved_unified_config()
+    if config.get("api_key") and config.get("video_enabled", True):
+        log_lines.append("> [引擎] 使用苍何 API 云端生成")
+        video_model = config.get("video_model", "veo3.1-fast")
+
+        success, video_path, error = generate_video_with_canghe_api(
+            shot=shot,
+            project=current_project,
+            prompt=full_prompt,
+            model=video_model,
+            gen_mode=gen_mode,
+            log_lines=log_lines
+        )
+
+        if success and video_path:
+            shot.output_video = video_path
+            auto_save_project()
+            log_lines.append("")
+            log_lines.append("========================================")
+            log_lines.append(f"✓ 视频生成完成 (苍何 API)")
+            log_lines.append(f"  镜头: {shot_num} | 模型: {video_model}")
+            log_lines.append(f"  风格: {style} | 时长: {duration} | 运镜: {camera}")
+            log_lines.append("========================================")
+            return "\n".join(log_lines), video_path
+
+        log_lines.append(f"> [苍何 API] 失败，尝试 ComfyUI 本地生成...")
+
+    # ===== 回退到 ComfyUI =====
+    log_lines.append("> [引擎] 使用 ComfyUI 本地生成")
 
     try:
         # 获取服务实例
@@ -1825,7 +2336,6 @@ def generate_video_from_shot(
                 return "\n".join(log_lines), None
 
         # 设置正向提示词 (节点 93)
-        prompt_text = shot.generated_prompt or shot.description or ""
         log_lines.append(f"> [提示词] 原始: {prompt_text[:50]}..." if len(prompt_text) > 50 else f"> [提示词] 原始: {prompt_text}")
 
         # 获取项目锁定的风格名称
@@ -1998,6 +2508,98 @@ def generate_single_video_simple(shot_num: int) -> Tuple[str, str]:
     )
     # 返回状态和更新后的视频卡片HTML
     return status, get_video_cards_html()
+
+
+def get_video_shot_choices() -> List[str]:
+    """获取可用于视频生成的镜头选项列表"""
+    if current_project is None or not current_project.shots:
+        return []
+
+    choices = []
+    for shot in current_project.shots:
+        has_image = shot.output_image and os.path.exists(shot.output_image)
+        # 检查是否已有视频
+        has_video = False
+        if shot.output_image:
+            base_path = os.path.splitext(shot.output_image)[0]
+            for ext in ['.mp4', '.webm', '.avi']:
+                if os.path.exists(base_path + ext):
+                    has_video = True
+                    break
+
+        if has_image:
+            status = "🎬" if has_video else "⏳"
+            choices.append(f"{status} 镜头 {shot.shot_number}")
+
+    return choices
+
+
+def generate_selected_videos(
+    selected_shots: List[str],
+    gen_mode: str,
+    style: str,
+    duration: str,
+    camera: str
+) -> Tuple[str, str, str]:
+    """生成选中镜头的视频"""
+    global current_project, cli_output_history
+
+    if not selected_shots:
+        return "请先选择要生成的镜头", "", get_video_cards_html()
+
+    if current_project is None:
+        return "请先创建项目", "", get_video_cards_html()
+
+    # 解析选中的镜头编号
+    shot_nums = []
+    for item in selected_shots:
+        # 格式: "🎬 镜头 1" 或 "⏳ 镜头 1"
+        try:
+            num = int(item.split("镜头")[-1].strip())
+            shot_nums.append(num)
+        except:
+            continue
+
+    if not shot_nums:
+        return "无法解析镜头编号", "", get_video_cards_html()
+
+    log_lines = []
+    log_lines.append("=" * 50)
+    log_lines.append(f"> [选中生成] 开始生成 {len(shot_nums)} 个镜头的视频")
+    log_lines.append(f"> [镜头] {shot_nums}")
+    log_lines.append("=" * 50)
+
+    cli_output_history.append(f"[视频生成] 开始生成选中的 {len(shot_nums)} 个镜头...")
+
+    success_count = 0
+    for i, shot_num in enumerate(shot_nums):
+        log_lines.append(f"\n> [{i+1}/{len(shot_nums)}] 正在生成镜头 {shot_num}...")
+        cli_output_history.append(f"[视频生成] 正在生成镜头 {shot_num} ({i+1}/{len(shot_nums)})")
+
+        status, video_path = generate_video_from_shot(
+            shot_num=shot_num,
+            gen_mode=gen_mode,
+            style=style,
+            duration=duration,
+            camera=camera,
+            char_refs=None,
+            prop_refs=None,
+            scene_ref=None
+        )
+
+        if video_path:
+            success_count += 1
+            log_lines.append(f"> [镜头 {shot_num}] ✓ 生成成功")
+        else:
+            log_lines.append(f"> [镜头 {shot_num}] ✗ 生成失败")
+
+    log_lines.append("\n" + "=" * 50)
+    log_lines.append(f"> [完成] 成功: {success_count}/{len(shot_nums)}")
+    log_lines.append("=" * 50)
+
+    cli_output_history.append(f"[视频生成] 完成: {success_count}/{len(shot_nums)} 个镜头成功")
+
+    return "\n".join(log_lines), f"✓ 已生成 {success_count}/{len(shot_nums)} 个视频", get_video_cards_html()
 
 
 def generate_all_videos(
@@ -2283,6 +2885,202 @@ def move_shot(shot_num: int, direction: str) -> Tuple[str, List]:
 # 导入导出功能
 # ========================================
 
+def generate_storyboard_html(project, timestamp: str) -> str:
+    """生成分镜剧本HTML网页内容"""
+    # 收集角色信息
+    characters_html = ""
+    for char in project.characters:
+        safe_name = char.name.replace(" ", "_").replace("/", "_")
+        ref_imgs_html = ""
+        for i, _ in enumerate(char.ref_images):
+            ref_imgs_html += f'<img src="assets/characters/{safe_name}_{i}.png" alt="{char.name}" class="ref-img">'
+        characters_html += f'''
+        <div class="character-card">
+            <h4>{char.name}</h4>
+            <p>{char.description}</p>
+            <div class="ref-images">{ref_imgs_html}</div>
+        </div>'''
+
+    # 收集场景信息
+    scenes_html = ""
+    for scene in project.scenes:
+        safe_name = scene.name.replace(" ", "_").replace("/", "_")
+        scene_img = f'<img src="assets/scenes/{safe_name}.png" alt="{scene.name}" class="scene-img">' if scene.space_ref_image else ""
+        scenes_html += f'''
+        <div class="scene-card">
+            <h4>{scene.name}</h4>
+            <p>{scene.description}</p>
+            {scene_img}
+        </div>'''
+
+    # 收集镜头信息
+    shots_html = ""
+    for shot in project.shots:
+        template = get_template(shot.template)
+        char_names = [c.name for c in project.characters if c.id in shot.characters_in_shot]
+        scene_name = next((s.name for s in project.scenes if s.id == shot.scene_id), "未指定")
+
+        # 图片和视频
+        img_html = f'<img src="assets/images/shot_{shot.shot_number:02d}.png" alt="镜头{shot.shot_number}" class="shot-img">' if shot.output_image else '<div class="no-image">待生成</div>'
+        video_html = f'<video controls class="shot-video"><source src="assets/videos/shot_{shot.shot_number:02d}.mp4" type="video/mp4">您的浏览器不支持视频播放</video>' if shot.output_video else ""
+
+        shots_html += f'''
+        <div class="shot-card">
+            <div class="shot-header">
+                <span class="shot-number">镜头 {shot.shot_number}</span>
+                <span class="shot-type">{template.name_cn if template else "标准"}</span>
+            </div>
+            <div class="shot-content">
+                <div class="shot-media">
+                    {img_html}
+                    {video_html}
+                </div>
+                <div class="shot-info">
+                    <p><strong>场景:</strong> {scene_name}</p>
+                    <p><strong>角色:</strong> {", ".join(char_names) if char_names else "无"}</p>
+                    <p><strong>描述:</strong> {shot.description}</p>
+                    {f'<p><strong>对白:</strong> {shot.dialogue}</p>' if shot.dialogue else ""}
+                    {f'<p><strong>动作:</strong> {shot.action}</p>' if shot.action else ""}
+                </div>
+            </div>
+        </div>'''
+
+    html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{project.name} - 分镜剧本</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        header {{
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            margin-bottom: 30px;
+        }}
+        header h1 {{ font-size: 2.5em; margin-bottom: 10px; color: #fff; }}
+        header .meta {{ color: #888; font-size: 0.9em; }}
+        .section {{
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }}
+        .section h2 {{
+            color: #4fc3f7;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(79,195,247,0.3);
+        }}
+        .cards {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }}
+        .character-card, .scene-card {{
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }}
+        .character-card h4, .scene-card h4 {{ color: #81d4fa; margin-bottom: 8px; }}
+        .character-card p, .scene-card p {{ color: #aaa; font-size: 0.9em; line-height: 1.5; }}
+        .ref-images {{ display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }}
+        .ref-img, .scene-img {{ max-width: 100px; max-height: 100px; border-radius: 8px; object-fit: cover; }}
+        .shot-card {{
+            background: rgba(0,0,0,0.3);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }}
+        .shot-header {{
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }}
+        .shot-number {{
+            background: linear-gradient(135deg, #4fc3f7, #29b6f6);
+            color: #000;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: bold;
+        }}
+        .shot-type {{
+            background: rgba(255,255,255,0.1);
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }}
+        .shot-content {{ display: flex; gap: 20px; flex-wrap: wrap; }}
+        .shot-media {{ flex: 0 0 400px; }}
+        .shot-img {{ width: 100%; border-radius: 12px; margin-bottom: 12px; }}
+        .shot-video {{ width: 100%; border-radius: 12px; }}
+        .no-image {{
+            width: 100%;
+            height: 200px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }}
+        .shot-info {{ flex: 1; min-width: 250px; }}
+        .shot-info p {{ margin-bottom: 10px; line-height: 1.6; }}
+        .shot-info strong {{ color: #81d4fa; }}
+        footer {{
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-size: 0.85em;
+        }}
+        @media (max-width: 768px) {{
+            .shot-media {{ flex: 0 0 100%; }}
+            header h1 {{ font-size: 1.8em; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>{project.name}</h1>
+            <div class="meta">
+                <p>画面比例: {project.aspect_ratio} | 镜头数: {len(project.shots)} | 导出时间: {timestamp}</p>
+            </div>
+        </header>
+
+        <section class="section">
+            <h2>👥 角色 ({len(project.characters)})</h2>
+            <div class="cards">{characters_html}</div>
+        </section>
+
+        <section class="section">
+            <h2>🎬 场景 ({len(project.scenes)})</h2>
+            <div class="cards">{scenes_html}</div>
+        </section>
+
+        <section class="section">
+            <h2>📷 分镜 ({len(project.shots)})</h2>
+            {shots_html}
+        </section>
+
+        <footer>
+            <p>由 AI 智能分镜 Pro 生成 | {timestamp}</p>
+        </footer>
+    </div>
+</body>
+</html>'''
+    return html
+
+
 def export_project_multi_format(format_type: str) -> Tuple[str, Optional[str]]:
     """多格式导出"""
     global current_project
@@ -2429,6 +3227,105 @@ def export_project_multi_format(format_type: str) -> Tuple[str, Optional[str]]:
                     zf.write(scene.space_ref_image, f"references/scenes/{scene.name}.png")
 
         return f"✓ 完整备份已导出: {backup_path}", str(backup_path)
+
+    elif format_type == "一键完整备份 (视频+脚本+图片)":
+        # 一键完整备份：包含视频、脚本、图片、参考图、项目文件
+        backup_name = f"{current_project.name}_full_backup_{timestamp}.zip"
+        backup_path = EXPORTS_DIR / backup_name
+
+        with zipfile.ZipFile(backup_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # 项目文件
+            zf.writestr("project.json", json.dumps(current_project.to_dict(), ensure_ascii=False, indent=2))
+
+            # 生成分镜脚本文本
+            script_lines = [
+                f"分镜脚本: {current_project.name}",
+                f"创建时间: {timestamp}",
+                f"画面比例: {current_project.aspect_ratio}",
+                "",
+                "=" * 50,
+                "角色列表:",
+                "=" * 50,
+            ]
+            for char in current_project.characters:
+                script_lines.append(f"  - {char.name}: {char.description}")
+            script_lines.extend(["", "=" * 50, "场景列表:", "=" * 50])
+            for scene in current_project.scenes:
+                script_lines.append(f"  - {scene.name}: {scene.description}")
+            script_lines.extend(["", "=" * 50, "分镜列表:", "=" * 50, ""])
+            for shot in current_project.shots:
+                template = get_template(shot.template)
+                char_names = [c.name for c in current_project.characters if c.id in shot.characters_in_shot]
+                scene_name = next((s.name for s in current_project.scenes if s.id == shot.scene_id), "")
+                script_lines.extend([
+                    f"镜头 {shot.shot_number}",
+                    f"  类型: {template.name_cn if template else '标准'}",
+                    f"  场景: {scene_name}",
+                    f"  角色: {', '.join(char_names) if char_names else '无'}",
+                    f"  描述: {shot.description}",
+                    f"  状态: {'已生成' if shot.output_image else '待生成'}",
+                    "-" * 40, ""
+                ])
+            zf.writestr("script.txt", "\n".join(script_lines))
+
+            # 输出图片
+            for shot in current_project.shots:
+                if shot.output_image and os.path.exists(shot.output_image):
+                    zf.write(shot.output_image, f"images/shot_{shot.shot_number:02d}.png")
+
+            # 输出视频
+            for shot in current_project.shots:
+                if shot.output_video and os.path.exists(shot.output_video):
+                    zf.write(shot.output_video, f"videos/shot_{shot.shot_number:02d}.mp4")
+
+            # 参考图片
+            for char in current_project.characters:
+                for i, img_path in enumerate(char.ref_images):
+                    if os.path.exists(img_path):
+                        zf.write(img_path, f"references/characters/{char.name}_{i}.png")
+
+            for scene in current_project.scenes:
+                if scene.space_ref_image and os.path.exists(scene.space_ref_image):
+                    zf.write(scene.space_ref_image, f"references/scenes/{scene.name}.png")
+
+        return f"✓ 一键完整备份已导出: {backup_path}", str(backup_path)
+
+    elif format_type == "网页剧本 (HTML+ZIP)":
+        # 网页剧本：生成HTML网页，使用相对路径引用图片和视频
+        web_name = f"{current_project.name}_web_{timestamp}.zip"
+        web_path = EXPORTS_DIR / web_name
+
+        # 生成HTML内容
+        html_content = generate_storyboard_html(current_project, timestamp)
+
+        with zipfile.ZipFile(web_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # 写入HTML文件
+            zf.writestr("index.html", html_content)
+
+            # 复制图片到assets/images目录
+            for shot in current_project.shots:
+                if shot.output_image and os.path.exists(shot.output_image):
+                    zf.write(shot.output_image, f"assets/images/shot_{shot.shot_number:02d}.png")
+
+            # 复制视频到assets/videos目录
+            for shot in current_project.shots:
+                if shot.output_video and os.path.exists(shot.output_video):
+                    zf.write(shot.output_video, f"assets/videos/shot_{shot.shot_number:02d}.mp4")
+
+            # 复制角色参考图
+            for char in current_project.characters:
+                for i, img_path in enumerate(char.ref_images):
+                    if os.path.exists(img_path):
+                        safe_name = char.name.replace(" ", "_").replace("/", "_")
+                        zf.write(img_path, f"assets/characters/{safe_name}_{i}.png")
+
+            # 复制场景参考图
+            for scene in current_project.scenes:
+                if scene.space_ref_image and os.path.exists(scene.space_ref_image):
+                    safe_name = scene.name.replace(" ", "_").replace("/", "_")
+                    zf.write(scene.space_ref_image, f"assets/scenes/{safe_name}.png")
+
+        return f"✓ 网页剧本已导出: {web_path}", str(web_path)
 
     return "未知格式", None
 
@@ -2786,6 +3683,7 @@ def get_example_stories_html() -> str:
 # ========================================
 
 # 全局 AI 服务实例
+ai_creative_service = None
 extracted_data = {"characters": [], "scenes": [], "props": []}
 
 
@@ -3218,13 +4116,16 @@ def get_shot_cards_html() -> str:
         img_data_uri = ""
         if has_image:
             try:
+                print(f"[卡片] 加载镜头 {i} 图片: {shot.output_image}")
                 with open(shot.output_image, "rb") as img_file:
                     img_data = base64.b64encode(img_file.read()).decode('utf-8')
                 ext = shot.output_image.lower().split('.')[-1]
                 mime_type = {'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp'}.get(ext, 'image/png')
                 img_data_uri = f"data:{mime_type};base64,{img_data}"
                 thumb_html = f'<img src="{img_data_uri}" class="shot-thumb" />'
+                print(f"[卡片] ✓ 镜头 {i} 图片加载成功, base64 长度: {len(img_data)}")
             except Exception as e:
+                print(f"[卡片] ✗ 镜头 {i} 图片加载失败: {e}")
                 thumb_html = '<div class="shot-thumb-placeholder">⚠️<br/>加载失败</div>'
         else:
             thumb_html = '<div class="shot-thumb-placeholder">🖼️<br/>待生成</div>'
@@ -3532,13 +4433,6 @@ def get_workflow_indicator(current_step: int = 0) -> str:
     '''
 
 
-# ========================================
-# AI 服务 (ComfyUI 集成)
-# ========================================
-
-ai_creative_service = None
-
-
 def get_ai_service():
     """获取 AI 创意服务实例"""
     global ai_creative_service
@@ -3622,7 +4516,26 @@ def connect_comfyui() -> Tuple[str, str]:
         return status_html, result
 
 
-DEFAULT_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "workflows/img.json")
+def load_custom_workflow(file) -> str:
+    """加载自定义工作流"""
+    if file is None:
+        return "请选择工作流文件"
+
+    service = get_ai_service()
+    if service.comfyui_client is None:
+        return "请先连接 ComfyUI"
+
+    filepath = file.name if hasattr(file, 'name') else file
+    success, message = service.comfyui_client.load_workflow_from_file(filepath)
+
+    if success:
+        return f"✓ 工作流加载成功"
+    else:
+        return f"✗ {message}"
+
+
+# 默认工作流路径
+DEFAULT_WORKFLOW_PATH = os.path.join(os.path.dirname(__file__), "image_z_image_turbo.json")
 
 
 def load_default_workflow() -> str:
@@ -3664,6 +4577,101 @@ def load_workflow_from_file(file) -> str:
         return f"✗ {message}"
 
 
+def analyze_story_text(story_text: str):
+    """分析剧情文本"""
+    global extracted_data
+
+    if not story_text.strip():
+        return (
+            "请输入剧情文本",
+            [], [], [],
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[])
+        )
+
+    service = get_ai_service()
+    result = service.analyze_story(story_text)
+
+    if result["success"]:
+        extracted_data = {
+            "characters": result.get("characters", []),
+            "scenes": result.get("scenes", []),
+            "props": result.get("props", [])
+        }
+
+        char_names = [c.get("name", "") for c in extracted_data["characters"]]
+        scene_names = [s.get("name", "") for s in extracted_data["scenes"]]
+        prop_names = [p.get("name", "") for p in extracted_data["props"]]
+
+        return (
+            f"✓ {result['message']}",
+            extracted_data["characters"],
+            extracted_data["scenes"],
+            extracted_data["props"],
+            gr.update(choices=char_names, value=char_names[0] if char_names else None),
+            gr.update(choices=scene_names, value=scene_names[0] if scene_names else None),
+            gr.update(choices=prop_names, value=prop_names[0] if prop_names else None),
+            gr.update(choices=char_names),
+            gr.update(choices=scene_names),
+            gr.update(choices=prop_names)
+        )
+    else:
+        return (
+            f"✗ 分析失败: {result['message']}",
+            [], [], [],
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[]),
+            gr.update(choices=[])
+        )
+
+
+def on_character_selected(char_name: str) -> str:
+    """角色选择变更"""
+    global extracted_data
+
+    for char in extracted_data.get("characters", []):
+        if char.get("name") == char_name:
+            info_parts = []
+            if char.get("age"):
+                info_parts.append(f"年龄: {char['age']}")
+            if char.get("gender"):
+                info_parts.append(f"性别: {char['gender']}")
+            if char.get("appearance"):
+                info_parts.append(f"外貌: {char['appearance']}")
+            if char.get("clothing"):
+                info_parts.append(f"服装: {char['clothing']}")
+            if char.get("role"):
+                info_parts.append(f"角色: {char['role']}")
+            return "\n".join(info_parts)
+    return ""
+
+
+def on_scene_selected(scene_name: str) -> str:
+    """场景选择变更"""
+    global extracted_data
+
+    for scene in extracted_data.get("scenes", []):
+        if scene.get("name") == scene_name:
+            info_parts = []
+            if scene.get("location_type"):
+                info_parts.append(f"类型: {scene['location_type']}")
+            if scene.get("description"):
+                info_parts.append(f"描述: {scene['description']}")
+            if scene.get("lighting"):
+                info_parts.append(f"光线: {scene['lighting']}")
+            if scene.get("atmosphere"):
+                info_parts.append(f"氛围: {scene['atmosphere']}")
+            return "\n".join(info_parts)
+    return ""
+
+
 def get_style_key(style_name: str) -> str:
     """获取风格键值"""
     style_map = {
@@ -3675,11 +4683,342 @@ def get_style_key(style_name: str) -> str:
     return style_map.get(style_name, "realistic")
 
 
+def generate_character_prompt_ui(char_name: str, style: str):
+    """生成角色提示语"""
+    global extracted_data
+
+    if not char_name:
+        return "", "请先选择角色"
+
+    char_info = None
+    for char in extracted_data.get("characters", []):
+        if char.get("name") == char_name:
+            char_info = char
+            break
+
+    if not char_info:
+        return "", "未找到角色信息"
+
+    service = get_ai_service()
+    result = service.generate_character_prompt(char_info, get_style_key(style))
+
+    if result["success"]:
+        return result["prompt"], f"✓ 提示语已生成"
+    else:
+        return "", f"✗ {result['message']}"
+
+
+def generate_scene_prompt_ui(scene_name: str, style: str):
+    """生成场景提示语"""
+    global extracted_data
+
+    if not scene_name:
+        return "", "请先选择场景"
+
+    scene_info = None
+    for scene in extracted_data.get("scenes", []):
+        if scene.get("name") == scene_name:
+            scene_info = scene
+            break
+
+    if not scene_info:
+        return "", "未找到场景信息"
+
+    service = get_ai_service()
+    result = service.generate_scene_prompt(scene_info, get_style_key(style))
+
+    if result["success"]:
+        return result["prompt"], f"✓ 提示语已生成"
+    else:
+        return "", f"✗ {result['message']}"
+
+
+def generate_character_image_ui(prompt: str, ref_file):
+    """生成角色图像"""
+    if not prompt:
+        return None, "", "请先生成提示语"
+
+    service = get_ai_service()
+    if service.comfyui_client is None:
+        return None, "", "请先连接 ComfyUI"
+
+    ref_path = ""
+    if ref_file is not None:
+        ref_path = ref_file.name if hasattr(ref_file, 'name') else ref_file
+
+    output_dir = str(ASSETS_DIR / "characters")
+
+    result = service.generate_image_with_comfyui(
+        prompt=prompt,
+        width=768,
+        height=1024,
+        ref_image_path=ref_path,
+        output_dir=output_dir
+    )
+
+    if result["success"] and result["images"]:
+        image_path = result["images"][0]
+
+        # 质量审核
+        review_result = service.review_generated_image("character", {}, prompt)
+        review_text = ""
+        if review_result["success"]:
+            review_text = f"评分: {review_result['score']}/10\n{review_result['summary']}"
+            if review_result.get("suggestions"):
+                review_text += f"\n建议: {', '.join(review_result['suggestions'][:2])}"
+
+        return image_path, review_text, f"✓ 生成完成 ({result['generation_time']:.1f}秒)"
+    else:
+        return None, "", f"✗ 生成失败: {result.get('message', 'Unknown error')}"
+
+
+def generate_scene_image_ui(prompt: str, ref_file):
+    """生成场景图像"""
+    if not prompt:
+        return None, "", "请先生成提示语"
+
+    service = get_ai_service()
+    if service.comfyui_client is None:
+        return None, "", "请先连接 ComfyUI"
+
+    ref_path = ""
+    if ref_file is not None:
+        ref_path = ref_file.name if hasattr(ref_file, 'name') else ref_file
+
+    output_dir = str(ASSETS_DIR / "scenes")
+
+    result = service.generate_image_with_comfyui(
+        prompt=prompt,
+        width=1024,
+        height=576,
+        ref_image_path=ref_path,
+        output_dir=output_dir
+    )
+
+    if result["success"] and result["images"]:
+        image_path = result["images"][0]
+
+        # 质量审核
+        review_result = service.review_generated_image("scene", {}, prompt)
+        review_text = ""
+        if review_result["success"]:
+            review_text = f"评分: {review_result['score']}/10\n{review_result['summary']}"
+
+        return image_path, review_text, f"✓ 生成完成 ({result['generation_time']:.1f}秒)"
+    else:
+        return None, "", f"✗ 生成失败: {result.get('message', 'Unknown error')}"
+
+
+def adopt_character_image(char_name: str):
+    """采用角色图像"""
+    global current_project
+
+    if current_project is None:
+        return "请先创建项目", get_character_list()
+
+    service = get_ai_service()
+    assets = service.get_generated_assets()
+
+    for asset in assets:
+        if asset.get("name") == char_name and asset.get("image_path"):
+            # 添加到角色参考图
+            for char in current_project.characters:
+                if char.name == char_name:
+                    if asset["image_path"] not in char.ref_images:
+                        char.ref_images.append(asset["image_path"])
+                    return f"✓ 已保存到角色「{char_name}」", get_character_list()
+
+            # 如果角色不存在，创建新角色
+            new_char = Character(
+                name=char_name,
+                description="",
+                ref_images=[asset["image_path"]],
+                consistency_weight=0.85
+            )
+            current_project.characters.append(new_char)
+            return f"✓ 已创建角色「{char_name}」并保存图像", get_character_list()
+
+    return "未找到生成的图像", get_character_list()
+
+
+def adopt_scene_image(scene_name: str):
+    """采用场景图像"""
+    global current_project
+
+    if current_project is None:
+        return "请先创建项目", get_scene_list()
+
+    service = get_ai_service()
+    assets = service.get_generated_assets()
+
+    for asset in assets:
+        if asset.get("name") == scene_name and asset.get("image_path"):
+            # 添加到场景参考图
+            for scene in current_project.scenes:
+                if scene.name == scene_name:
+                    scene.space_ref_image = asset["image_path"]
+                    return f"✓ 已保存到场景「{scene_name}」", get_scene_list()
+
+            # 如果场景不存在，创建新场景
+            new_scene = Scene(
+                name=scene_name,
+                description="",
+                space_ref_image=asset["image_path"],
+                consistency_weight=0.7
+            )
+            current_project.scenes.append(new_scene)
+            return f"✓ 已创建场景「{scene_name}」并保存图像", get_scene_list()
+
+    return "未找到生成的图像", get_scene_list()
+
+
+def batch_generate_assets(chars: List[str], scenes: List[str], props: List[str], style: str):
+    """批量生成资产"""
+    global extracted_data
+
+    service = get_ai_service()
+    if service.comfyui_client is None:
+        return "请先连接 ComfyUI", []
+
+    results = []
+    total = len(chars) + len(scenes) + len(props)
+    current = 0
+
+    style_key = get_style_key(style)
+
+    # 生成角色
+    for char_name in chars:
+        current += 1
+        for char in extracted_data.get("characters", []):
+            if char.get("name") == char_name:
+                prompt_result = service.generate_character_prompt(char, style_key)
+                if prompt_result["success"]:
+                    gen_result = service.generate_image_with_comfyui(
+                        prompt=prompt_result["prompt"],
+                        width=768,
+                        height=1024,
+                        output_dir=str(ASSETS_DIR / "characters")
+                    )
+                    if gen_result["success"] and gen_result["images"]:
+                        results.append((gen_result["images"][0], f"角色: {char_name}"))
+                break
+
+    # 生成场景
+    for scene_name in scenes:
+        current += 1
+        for scene in extracted_data.get("scenes", []):
+            if scene.get("name") == scene_name:
+                prompt_result = service.generate_scene_prompt(scene, style_key)
+                if prompt_result["success"]:
+                    gen_result = service.generate_image_with_comfyui(
+                        prompt=prompt_result["prompt"],
+                        width=1024,
+                        height=576,
+                        output_dir=str(ASSETS_DIR / "scenes")
+                    )
+                    if gen_result["success"] and gen_result["images"]:
+                        results.append((gen_result["images"][0], f"场景: {scene_name}"))
+                break
+
+    return f"✓ 已生成 {len(results)}/{total} 个资产", results
+
+
 # ========================================
 # 剧本转分镜手册功能
 # ========================================
 
 # 全局存储生成的手册内容
+generated_manual_content = ""
+
+
+def load_story_from_file(file) -> str:
+    """从文件加载故事内容"""
+    if file is None:
+        return ""
+
+    filepath = file.name if hasattr(file, 'name') else file
+
+    try:
+        if filepath.endswith('.txt'):
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return f.read()
+        elif filepath.endswith('.docx'):
+            try:
+                from docx import Document
+                doc = Document(filepath)
+                return '\n'.join([p.text for p in doc.paragraphs])
+            except ImportError:
+                return "请安装 python-docx: pip install python-docx"
+        else:
+            return "不支持的文件格式，请上传 TXT 或 DOCX 文件"
+    except Exception as e:
+        return f"加载文件失败: {str(e)}"
+
+
+def generate_video_production_manual(story_text: str, style: str, aspect: str, detail_level: str) -> Tuple[str, str]:
+    """生成视频制作操作手册"""
+    global generated_manual_content
+
+    if not story_text or len(story_text.strip()) < 50:
+        return "请输入至少50字的剧本/小说内容", "*请先输入内容*"
+
+    # 解析画面比例
+    aspect_map = {
+        "16:9 横屏": "16:9",
+        "9:16 竖屏": "9:16",
+        "1:1 方形": "1:1",
+        "2.35:1 宽银幕": "2.35:1"
+    }
+    aspect_ratio = aspect_map.get(aspect, "16:9")
+
+    # 导入分析器
+    from video_analyzer import ClaudeAnalyzer
+
+    analyzer = ClaudeAnalyzer()
+
+    try:
+        # 生成手册
+        result = analyzer.generate_production_manual(
+            story_text=story_text,
+            style=style,
+            aspect_ratio=aspect_ratio
+        )
+
+        if result and result != "视频制作手册生成失败":
+            generated_manual_content = result
+            return "✓ 视频制作手册生成成功！", result
+        else:
+            return "✗ 生成失败，请检查 Claude CLI 是否正常", "*生成失败*"
+
+    except Exception as e:
+        return f"✗ 生成失败: {str(e)}", "*生成失败*"
+
+
+def export_production_manual() -> Tuple[str, Optional[str]]:
+    """导出生成的手册"""
+    global generated_manual_content
+
+    if not generated_manual_content:
+        return "暂无内容可导出，请先生成手册", None
+
+    try:
+        # 创建导出目录
+        export_dir = EXPORTS_DIR / "manuals"
+        export_dir.mkdir(parents=True, exist_ok=True)
+
+        # 生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"视频制作手册_{timestamp}.md"
+        filepath = export_dir / filename
+
+        # 写入文件
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(generated_manual_content)
+
+        return f"✓ 已导出到: {filepath}", str(filepath)
+
+    except Exception as e:
+        return f"✗ 导出失败: {str(e)}", None
 
 
 # ========================================
@@ -3687,6 +5026,8 @@ def get_style_key(style_name: str) -> str:
 # ========================================
 
 # 全局视频分析服务
+video_analysis_service = None
+current_video_result = None
 
 
 def get_video_service():
@@ -3697,6 +5038,226 @@ def get_video_service():
         project_service = ProjectService()
         video_analysis_service = VideoAnalysisService(project_service)
     return video_analysis_service
+
+
+def test_video_analysis_connections(host: str, port: int) -> str:
+    """测试视频分析所需的连接"""
+    service = get_video_service()
+    results = service.test_connections(host, int(port))
+
+    status_parts = []
+    for name, info in results.items():
+        icon = "✓" if info["connected"] else "✗"
+        status_parts.append(f"{icon} {name.upper()}: {info['message']}")
+
+    return "\n".join(status_parts)
+
+
+def on_video_uploaded(file):
+    """视频文件上传后的处理"""
+    if file is None:
+        return "", gr.update(maximum=100)
+
+    filepath = file.name if hasattr(file, 'name') else file
+    service = get_video_service()
+    info = service.get_video_info(filepath)
+
+    if "error" in info:
+        return f"错误: {info['error']}", gr.update(maximum=100)
+
+    info_text = f"""文件: {os.path.basename(filepath)}
+时长: {info.get('duration_formatted', 'N/A')}
+分辨率: {info.get('width', 0)}x{info.get('height', 0)}
+帧率: {info.get('fps', 0):.2f} fps
+总帧数: {info.get('frame_count', 0)}"""
+
+    duration = info.get('duration', 100)
+    return info_text, gr.update(maximum=int(duration))
+
+
+def start_video_analysis(
+    video_file,
+    mode: str,
+    interval: float,
+    max_frame: int,
+    host: str,
+    port: int
+):
+    """开始视频分析"""
+    global current_video_result
+
+    if video_file is None:
+        return (
+            "请先上传视频文件",
+            "", "", "", [], [], [], [], [],
+            gr.update(maximum=100)
+        )
+
+    filepath = video_file.name if hasattr(video_file, 'name') else video_file
+    service = get_video_service()
+
+    # 进行分析
+    result = service.analyze_video(
+        video_path=filepath,
+        extraction_mode=mode,
+        interval_seconds=interval,
+        max_frames=int(max_frame),
+        ollama_host=host,
+        ollama_port=int(port)
+    )
+
+    if not result["success"]:
+        return (
+            f"✗ 分析失败: {result['message']}",
+            "", "", "", [], [], [], [], [],
+            gr.update(maximum=100)
+        )
+
+    current_video_result = result["result"]
+
+    # 准备返回数据
+    story_summary = current_video_result.get("story_summary", "")
+    story_structure = current_video_result.get("story_structure", "")
+    storyboard = current_video_result.get("storyboard", "")
+
+    # 角色数据
+    chars_data = []
+    for c in current_video_result.get("characters", []):
+        chars_data.append([
+            c.get("id", ""),
+            c.get("name", ""),
+            c.get("role_type", ""),
+            f"{c.get('first_appearance', 0):.1f}s",
+            c.get("appearance_description", "")[:50]
+        ])
+
+    # 场景数据
+    scenes_data = []
+    for s in current_video_result.get("scenes", []):
+        scenes_data.append([
+            s.get("id", ""),
+            s.get("scene_name", ""),
+            f"{s.get('start_time', 0):.1f}s",
+            f"{s.get('end_time', 0):.1f}s",
+            s.get("atmosphere", ""),
+            s.get("lighting", "")
+        ])
+
+    # 分镜数据
+    shots_data = []
+    for sh in current_video_result.get("shots", []):
+        shots_data.append([
+            sh.get("id", ""),
+            f"{sh.get('timestamp', 0):.1f}s",
+            sh.get("shot_type", ""),
+            sh.get("camera_angle", ""),
+            sh.get("camera_movement", ""),
+            sh.get("purpose", "")[:30]
+        ])
+
+    # 故事节点数据
+    points_data = []
+    for sp in current_video_result.get("story_points", []):
+        points_data.append([
+            sp.get("id", ""),
+            f"{sp.get('timestamp', 0):.1f}s",
+            sp.get("title", ""),
+            sp.get("point_type", ""),
+            sp.get("emotional_impact", "")[:30]
+        ])
+
+    # 帧图片
+    frame_images = []
+    for f in current_video_result.get("frames", [])[:50]:
+        if f.get("image_path") and os.path.exists(f.get("image_path", "")):
+            frame_images.append(f["image_path"])
+
+    duration = current_video_result.get("duration", 100)
+
+    return (
+        f"✓ 分析完成! 提取了 {len(current_video_result.get('frames', []))} 帧",
+        story_summary,
+        story_structure,
+        storyboard,
+        chars_data,
+        scenes_data,
+        shots_data,
+        points_data,
+        frame_images,
+        gr.update(maximum=int(duration), value=0)
+    )
+
+
+def on_timeline_change(timestamp: float):
+    """时间轴滑动时更新帧预览"""
+    global current_video_result
+
+    if not current_video_result:
+        return None, "", "", ""
+
+    frames = current_video_result.get("frames", [])
+    if not frames:
+        return None, "", "", ""
+
+    # 找到最近的帧
+    closest_frame = min(frames, key=lambda f: abs(f.get("timestamp", 0) - timestamp))
+
+    image_path = closest_frame.get("image_path", "")
+    if image_path and os.path.exists(image_path):
+        frame_image = image_path
+    else:
+        frame_image = None
+
+    frame_info = f"""帧ID: {closest_frame.get('id', '')}
+时间戳: {closest_frame.get('timestamp_formatted', '')}
+帧号: {closest_frame.get('frame_number', 0)}
+类型: {closest_frame.get('frame_type', '')}"""
+
+    tags = ", ".join(closest_frame.get("tags", []))
+    ocr_text = closest_frame.get("ocr_text", "")
+
+    return frame_image, frame_info, tags, ocr_text
+
+
+def export_pdf_report():
+    """导出PDF报告"""
+    service = get_video_service()
+    result = service.generate_pdf_report()
+
+    if result["success"]:
+        return f"✓ {result['message']}", result["path"]
+    else:
+        return f"✗ {result['message']}", None
+
+
+def save_analysis_result():
+    """保存分析结果"""
+    service = get_video_service()
+    result = service.save_result()
+
+    if result["success"]:
+        return f"✓ {result['message']}", result["path"]
+    else:
+        return f"✗ {result['message']}", None
+
+
+def load_analysis_result(file):
+    """加载分析结果"""
+    global current_video_result
+
+    if file is None:
+        return "请选择文件", "", "", "", [], [], [], [], []
+
+    filepath = file.name if hasattr(file, 'name') else file
+    service = get_video_service()
+    result = service.load_result(filepath)
+
+    if result["success"]:
+        current_video_result = result["result"]
+        # 返回与 start_video_analysis 相同格式的数据
+        return format_loaded_result(current_video_result)
+    else:
+        return result["message"], "", "", "", [], [], [], [], []
 
 
 def format_loaded_result(data):
@@ -3765,6 +5326,92 @@ def format_loaded_result(data):
     )
 
 
+def check_cleanup_info() -> str:
+    """查看可清理的历史数据信息"""
+    service = get_video_service()
+    info = service.get_cleanup_info(days_to_keep=1)
+
+    dirs_to_clean = info.get("directories_to_clean", [])
+    dirs_to_keep = info.get("directories_to_keep", [])
+
+    if not dirs_to_clean:
+        keep_info = ""
+        if dirs_to_keep:
+            keep_info = "\n\n保留的目录:\n" + "\n".join([f"  - {d['name']}" for d in dirs_to_keep])
+        return "✓ 没有需要清理的历史数据" + keep_info
+
+    lines = [
+        f"发现 {len(dirs_to_clean)} 个可清理的历史运行目录:",
+        f"总大小: {info.get('total_size_to_clean_mb', 0):.2f} MB",
+        f"截止时间: {info.get('cutoff_date', '')}",
+        "",
+        "将要清理的目录:"
+    ]
+
+    for d in dirs_to_clean:
+        lines.append(f"  - {d['name']} ({d['size_mb']:.2f} MB, {d['created']})")
+
+    if dirs_to_keep:
+        lines.extend([
+            "",
+            f"保留的目录 ({len(dirs_to_keep)} 个):"
+        ])
+        for d in dirs_to_keep:
+            lines.append(f"  - {d['name']} ({d['size_mb']:.2f} MB)")
+
+    lines.extend([
+        "",
+        "⚠️ 点击「确认清理」按钮执行清理操作"
+    ])
+
+    return "\n".join(lines)
+
+
+def confirm_cleanup() -> Tuple[str, str]:
+    """确认并执行清理操作"""
+    service = get_video_service()
+
+    # 先获取清理信息
+    info = service.get_cleanup_info(days_to_keep=1)
+    if not info.get("directories_to_clean"):
+        return "没有需要清理的数据", "✓ 无需清理"
+
+    # 执行清理
+    result = service.cleanup_old_runs(days_to_keep=1)
+
+    if result.get("success"):
+        return (
+            f"✓ 清理完成！\n删除了 {result.get('cleaned_count', 0)} 个目录\n释放空间: {result.get('cleaned_size_mb', 0):.2f} MB",
+            "✓ 清理成功"
+        )
+    else:
+        return (
+            f"✗ 清理失败: {result.get('message', '未知错误')}",
+            "✗ 清理失败"
+        )
+
+
+def save_overview_changes(summary: str, structure: str):
+    """保存概览修改"""
+    global current_video_result
+    if not current_video_result:
+        return "没有分析结果"
+
+    current_video_result["story_summary"] = summary
+    current_video_result["story_structure"] = structure
+    return "✓ 概览已更新"
+
+
+def save_storyboard_changes(storyboard: str):
+    """保存分镜脚本修改"""
+    global current_video_result
+    if not current_video_result:
+        return "没有分析结果"
+
+    current_video_result["storyboard"] = storyboard
+    return "✓ 分镜脚本已更新"
+
+
 # ========================================
 # 时间线可视化函数
 # ========================================
@@ -3820,6 +5467,702 @@ def format_time_badge(seconds: float) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def generate_plot_track_html(current_time: float) -> str:
+    """生成剧情轨道 HTML"""
+    global current_video_result
+    if not current_video_result:
+        return '<div class="timeline-track track-plot"><div class="track-content">暂无数据</div></div>'
+
+    time_str = format_time_badge(current_time)
+    story_summary = current_video_result.get("story_summary", "")
+    story_structure = current_video_result.get("story_structure", "")
+
+    # 获取当前时间点的故事节点
+    story_points = current_video_result.get("story_points", [])
+    current_point = None
+    for sp in story_points:
+        sp_time = sp.get("timestamp", 0)
+        if sp_time <= current_time:
+            current_point = sp
+        else:
+            break
+
+    point_info = ""
+    if current_point:
+        title = current_point.get("title", "")
+        point_type = current_point.get("point_type", "")
+        description = current_point.get("description", "")
+        emotional = current_point.get("emotional_impact", "")
+        point_info = f"""
+        <div style="margin-top: 12px; padding: 10px; background: rgba(255,107,107,0.1); border-radius: 8px;">
+            <strong>{highlight_keywords(title, 'plot')}</strong>
+            <span class="timeline-marker">{point_type}</span><br/>
+            <small>{highlight_keywords(description, 'plot')}</small><br/>
+            <small style="color: #ff6b6b;">情感: {emotional}</small>
+        </div>
+        """
+
+    content = f"""
+    <div style="margin-bottom: 8px;">
+        <strong>故事概要:</strong> {highlight_keywords(story_summary[:200], 'plot')}...
+    </div>
+    <div style="margin-bottom: 8px;">
+        <strong>结构:</strong> {highlight_keywords(story_structure[:150], 'plot')}...
+    </div>
+    {point_info}
+    """
+
+    return f'''
+    <div class="timeline-track track-plot">
+        <div class="track-label">
+            <span class="time-badge">{time_str}</span>
+            🎭 剧情发展
+        </div>
+        <div class="track-content">{content}</div>
+    </div>
+    '''
+
+
+def generate_character_track_html(current_time: float) -> str:
+    """生成人物轨道 HTML"""
+    global current_video_result
+    if not current_video_result:
+        return '<div class="timeline-track track-character"><div class="track-content">暂无数据</div></div>'
+
+    time_str = format_time_badge(current_time)
+    characters = current_video_result.get("characters", [])
+
+    # 找出当前时间点出现的角色
+    active_chars = []
+    for char in characters:
+        first_app = char.get("first_appearance", 0)
+        if first_app <= current_time:
+            active_chars.append(char)
+
+    if not active_chars:
+        content = "暂无角色出场"
+    else:
+        char_html_list = []
+        for char in active_chars:
+            name = char.get("name", "未知")
+            role_type = char.get("role_type", "")
+            appearance = char.get("appearance_description", "")[:80]
+            traits = ", ".join(char.get("personality_traits", [])[:3])
+
+            char_html = f'''
+            <div style="display: inline-block; margin: 4px; padding: 8px 12px;
+                        background: rgba(78,205,196,0.15); border-radius: 8px; border: 1px solid rgba(78,205,196,0.3);">
+                <strong class="highlight-green">{name}</strong>
+                <span class="timeline-marker">{role_type}</span><br/>
+                <small>{highlight_keywords(appearance, 'character')}</small><br/>
+                <small style="color: #4ecdc4;">特征: {traits}</small>
+            </div>
+            '''
+            char_html_list.append(char_html)
+        content = "".join(char_html_list)
+
+    return f'''
+    <div class="timeline-track track-character">
+        <div class="track-label">
+            <span class="time-badge">{time_str}</span>
+            👤 出场人物 ({len(active_chars)}人)
+        </div>
+        <div class="track-content">{content}</div>
+    </div>
+    '''
+
+
+def generate_scene_track_html(current_time: float) -> str:
+    """生成场景轨道 HTML"""
+    global current_video_result
+    if not current_video_result:
+        return '<div class="timeline-track track-scene"><div class="track-content">暂无数据</div></div>'
+
+    time_str = format_time_badge(current_time)
+    scenes = current_video_result.get("scenes", [])
+
+    # 找出当前场景
+    current_scene = None
+    for scene in scenes:
+        start = scene.get("start_time", 0)
+        end = scene.get("end_time", float('inf'))
+        if start <= current_time <= end:
+            current_scene = scene
+            break
+
+    if not current_scene:
+        content = "暂无场景信息"
+    else:
+        scene_name = current_scene.get("scene_name", "未知场景")
+        location = current_scene.get("location_type", "")
+        atmosphere = current_scene.get("atmosphere", "")
+        lighting = current_scene.get("lighting", "")
+        elements = ", ".join(current_scene.get("key_elements", [])[:5])
+
+        content = f'''
+        <div style="padding: 12px; background: rgba(69,183,209,0.1); border-radius: 8px;">
+            <strong class="highlight-blue">{scene_name}</strong>
+            <span class="timeline-marker">{location}</span><br/>
+            <div style="margin-top: 8px;">
+                <small>🌤️ 氛围: {highlight_keywords(atmosphere, 'scene')}</small><br/>
+                <small>💡 光线: {highlight_keywords(lighting, 'scene')}</small><br/>
+                <small>📦 元素: {elements}</small>
+            </div>
+        </div>
+        '''
+
+    return f'''
+    <div class="timeline-track track-scene">
+        <div class="track-label">
+            <span class="time-badge">{time_str}</span>
+            🏞️ 当前场景
+        </div>
+        <div class="track-content">{content}</div>
+    </div>
+    '''
+
+
+def generate_props_track_html(current_time: float) -> str:
+    """生成道具轨道 HTML"""
+    global current_video_result
+    if not current_video_result:
+        return '<div class="timeline-track track-prop"><div class="track-content">暂无数据</div></div>'
+
+    time_str = format_time_badge(current_time)
+
+    # 从场景和帧数据中提取道具信息
+    scenes = current_video_result.get("scenes", [])
+    frames = current_video_result.get("frames", [])
+
+    props_list = set()
+
+    # 从场景关键元素中提取
+    for scene in scenes:
+        start = scene.get("start_time", 0)
+        end = scene.get("end_time", float('inf'))
+        if start <= current_time <= end:
+            for elem in scene.get("key_elements", []):
+                props_list.add(elem)
+
+    # 从帧标签中提取道具相关标签
+    for frame in frames:
+        ts = frame.get("timestamp", 0)
+        if abs(ts - current_time) < 5:  # 5秒范围内
+            for tag in frame.get("tags", []):
+                if any(kw in tag for kw in ["道具", "物品", "武器", "工具"]):
+                    props_list.add(tag)
+
+    if not props_list:
+        content = "暂无道具信息"
+    else:
+        props_html = " ".join([
+            f'<span class="timeline-marker" style="background: linear-gradient(90deg, #f9ca24 0%, #f0932b 100%);">{prop}</span>'
+            for prop in list(props_list)[:10]
+        ])
+        content = f'<div style="padding: 8px 0;">{props_html}</div>'
+
+    return f'''
+    <div class="timeline-track track-prop">
+        <div class="track-label">
+            <span class="time-badge">{time_str}</span>
+            📦 关键道具
+        </div>
+        <div class="track-content">{content}</div>
+    </div>
+    '''
+
+
+def generate_shot_track_html(current_time: float) -> str:
+    """生成分镜轨道 HTML"""
+    global current_video_result
+    if not current_video_result:
+        return '<div class="timeline-track track-shot"><div class="track-content">暂无数据</div></div>'
+
+    time_str = format_time_badge(current_time)
+    shots = current_video_result.get("shots", [])
+    storyboard = current_video_result.get("storyboard", "")
+
+    # 找出当前或最近的分镜
+    current_shot = None
+    for shot in shots:
+        shot_time = shot.get("timestamp", 0)
+        if shot_time <= current_time:
+            current_shot = shot
+        else:
+            break
+
+    shot_content = ""
+    if current_shot:
+        shot_type = current_shot.get("shot_type", "")
+        angle = current_shot.get("camera_angle", "")
+        movement = current_shot.get("camera_movement", "")
+        composition = current_shot.get("composition", "")
+        purpose = current_shot.get("purpose", "")
+
+        shot_content = f'''
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+            <span class="timeline-marker" style="background: linear-gradient(90deg, #a29bfe 0%, #6c5ce7 100%);">
+                {highlight_keywords(shot_type, 'shot')}
+            </span>
+            <span class="timeline-marker" style="background: rgba(162,155,254,0.5);">
+                {highlight_keywords(angle, 'shot')}
+            </span>
+            <span class="timeline-marker" style="background: rgba(162,155,254,0.3);">
+                {highlight_keywords(movement, 'shot')}
+            </span>
+        </div>
+        <div style="font-size: 12px;">
+            <small>构图: {composition}</small><br/>
+            <small>目的: {purpose}</small>
+        </div>
+        '''
+
+    # 从分镜脚本中提取当前时间的行
+    storyboard_line = ""
+    if storyboard:
+        for line in storyboard.split('\n'):
+            if not line.strip():
+                continue
+            # 解析时间范围 (如 "0.1～2秒:")
+            import re
+            match = re.match(r'(\d+(?:\.\d+)?)\s*[～~-]\s*(\d+(?:\.\d+)?)\s*秒', line)
+            if match:
+                start = float(match.group(1))
+                end = float(match.group(2))
+                if start <= current_time <= end:
+                    storyboard_line = f'''
+                    <div style="margin-top: 12px; padding: 10px; background: rgba(162,155,254,0.1);
+                                border-radius: 8px; border-left: 3px solid #a29bfe;">
+                        <strong>分镜脚本:</strong><br/>
+                        {highlight_keywords(line, 'shot')}
+                    </div>
+                    '''
+                    break
+
+    content = shot_content + storyboard_line if (shot_content or storyboard_line) else "暂无分镜信息"
+
+    return f'''
+    <div class="timeline-track track-shot">
+        <div class="track-label">
+            <span class="time-badge">{time_str}</span>
+            🎬 镜头信息
+        </div>
+        <div class="track-content">{content}</div>
+    </div>
+    '''
+
+
+def format_timecode(seconds: float) -> str:
+    """格式化为专业时间码 HH:MM:SS:FF"""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    frames = int((seconds % 1) * 25)  # 假设 25fps
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}:{frames:02d}"
+
+
+def generate_nle_timeline_html(duration: float, current_time: float = 0) -> str:
+    """生成完整的 NLE 风格时间线 HTML"""
+    global current_video_result
+
+    if not current_video_result or duration <= 0:
+        return """
+        <div class="nle-container">
+            <div class="nle-toolbar">
+                <div class="nle-toolbar-group">
+                    <span style="color:#888;font-size:11px;">PROJECT</span>
+                    <span class="nle-timecode">00:00:00:00</span>
+                </div>
+            </div>
+            <div class="nle-timeline-wrapper">
+                <div class="nle-tracks" style="padding:60px;text-align:center;color:#666;">
+                    <p>暂无分析数据</p>
+                    <p style="font-size:12px;">请先在「视频拆解」标签页分析视频</p>
+                </div>
+            </div>
+        </div>
+        """
+
+    # 计算播放头位置百分比
+    playhead_percent = (current_time / duration) * 100 if duration > 0 else 0
+
+    # 生成时间标尺刻度 (每隔一定时间一个刻度)
+    ruler_interval = max(1, int(duration / 10))  # 大约10个刻度
+    ruler_marks_html = ""
+    for i in range(0, int(duration) + 1, ruler_interval):
+        ruler_marks_html += f'<div class="nle-ruler-mark"><span>{format_time_badge(i)}</span></div>'
+
+    # 生成剧情轨道片段
+    story_points = current_video_result.get("story_points", [])
+    plot_clips_html = ""
+    for i, sp in enumerate(story_points):
+        ts = sp.get("timestamp", 0)
+        title = sp.get("title", f"节点{i+1}")
+        point_type = sp.get("point_type", "")
+        left_percent = (ts / duration) * 100
+        # 计算片段宽度 (到下一个节点或结尾)
+        next_ts = story_points[i+1].get("timestamp", duration) if i+1 < len(story_points) else duration
+        width_percent = ((next_ts - ts) / duration) * 100
+        width_percent = max(width_percent, 5)  # 最小宽度
+
+        plot_clips_html += f'''
+        <div class="nle-clip" style="position:absolute;left:{left_percent}%;width:{width_percent}%;min-width:60px;"
+             title="{title} - {point_type}">
+            <div class="nle-clip-title">{title[:15]}</div>
+            <div class="nle-clip-time">{format_time_badge(ts)} | {point_type}</div>
+        </div>
+        '''
+
+    # 生成人物轨道片段
+    characters = current_video_result.get("characters", [])
+    char_clips_html = ""
+    for char in characters:
+        ts = char.get("first_appearance", 0)
+        name = char.get("name", "未知")
+        role_type = char.get("role_type", "")
+        left_percent = (ts / duration) * 100
+        # 角色一般持续到视频结尾
+        width_percent = ((duration - ts) / duration) * 100
+        width_percent = max(width_percent, 8)
+
+        char_clips_html += f'''
+        <div class="nle-clip" style="position:absolute;left:{left_percent}%;width:{width_percent}%;min-width:80px;"
+             title="{name} ({role_type})">
+            <div class="nle-clip-title">{name}</div>
+            <div class="nle-clip-time">{format_time_badge(ts)} | {role_type}</div>
+        </div>
+        '''
+
+    # 生成场景轨道片段
+    scenes = current_video_result.get("scenes", [])
+    scene_clips_html = ""
+    for scene in scenes:
+        start = scene.get("start_time", 0)
+        end = scene.get("end_time", duration)
+        name = scene.get("scene_name", "未知场景")
+        location = scene.get("location_type", "")
+        left_percent = (start / duration) * 100
+        width_percent = ((end - start) / duration) * 100
+        width_percent = max(width_percent, 5)
+
+        scene_clips_html += f'''
+        <div class="nle-clip" style="position:absolute;left:{left_percent}%;width:{width_percent}%;min-width:60px;"
+             title="{name}">
+            <div class="nle-clip-title">{name[:12]}</div>
+            <div class="nle-clip-time">{format_time_badge(start)}-{format_time_badge(end)} | {location}</div>
+        </div>
+        '''
+
+    # 生成道具轨道片段 (从场景元素中提取)
+    props_clips_html = ""
+    props_shown = set()
+    for scene in scenes:
+        start = scene.get("start_time", 0)
+        end = scene.get("end_time", duration)
+        for elem in scene.get("key_elements", [])[:3]:
+            if elem not in props_shown:
+                props_shown.add(elem)
+                left_percent = (start / duration) * 100
+                width_percent = ((end - start) / duration) * 100
+                width_percent = max(width_percent, 4)
+
+                props_clips_html += f'''
+                <div class="nle-clip" style="position:absolute;left:{left_percent}%;width:{width_percent}%;min-width:50px;"
+                     title="{elem}">
+                    <div class="nle-clip-title">{elem[:10]}</div>
+                    <div class="nle-clip-time">{format_time_badge(start)}</div>
+                </div>
+                '''
+
+    # 生成分镜轨道片段
+    shots = current_video_result.get("shots", [])
+    shot_clips_html = ""
+    for i, shot in enumerate(shots):
+        ts = shot.get("timestamp", 0)
+        shot_type = shot.get("shot_type", "")
+        angle = shot.get("camera_angle", "")
+        left_percent = (ts / duration) * 100
+        # 计算到下一个分镜的宽度
+        next_ts = shots[i+1].get("timestamp", duration) if i+1 < len(shots) else duration
+        width_percent = ((next_ts - ts) / duration) * 100
+        width_percent = max(width_percent, 3)
+
+        shot_clips_html += f'''
+        <div class="nle-clip" style="position:absolute;left:{left_percent}%;width:{width_percent}%;min-width:40px;"
+             title="{shot_type} {angle}">
+            <div class="nle-clip-title">{shot_type}</div>
+            <div class="nle-clip-time">{format_time_badge(ts)} | {angle}</div>
+        </div>
+        '''
+
+    # 组装完整 HTML
+    html = f'''
+    <div class="nle-container">
+        <!-- 工具栏 -->
+        <div class="nle-toolbar">
+            <div class="nle-toolbar-group">
+                <span style="color:#888;font-size:11px;">POSITION</span>
+                <span class="nle-timecode">{format_timecode(current_time)}</span>
+            </div>
+            <div class="nle-toolbar-group nle-transport">
+                <button class="nle-transport-btn" title="跳到开始">⏮</button>
+                <button class="nle-transport-btn" title="后退">⏪</button>
+                <button class="nle-transport-btn active" title="播放">▶</button>
+                <button class="nle-transport-btn" title="前进">⏩</button>
+                <button class="nle-transport-btn" title="跳到结尾">⏭</button>
+            </div>
+            <div class="nle-toolbar-group nle-zoom-control">
+                <span>缩放</span>
+                <input type="range" class="nle-zoom-slider" min="1" max="10" value="5">
+            </div>
+            <div style="flex:1;"></div>
+            <div class="nle-toolbar-group">
+                <span style="color:#888;font-size:11px;">DURATION</span>
+                <span class="nle-timecode">{format_timecode(duration)}</span>
+            </div>
+        </div>
+
+        <!-- 时间线主体 -->
+        <div class="nle-timeline-wrapper">
+            <!-- 时间标尺 -->
+            <div class="nle-ruler">
+                <div class="nle-ruler-header">TRACKS</div>
+                <div class="nle-ruler-content">
+                    <div class="nle-ruler-marks">{ruler_marks_html}</div>
+                    <div class="nle-playhead" style="left:{playhead_percent}%;height:400px;"></div>
+                </div>
+            </div>
+
+            <!-- 轨道区域 -->
+            <div class="nle-tracks">
+                <!-- 剧情轨道 -->
+                <div class="nle-track nle-track-plot">
+                    <div class="nle-track-header">
+                        <div class="nle-track-name"><span class="icon">🎭</span> 剧情 Plot</div>
+                        <div class="nle-track-controls">
+                            <button class="nle-track-ctrl-btn" title="静音">M</button>
+                            <button class="nle-track-ctrl-btn" title="独奏">S</button>
+                            <button class="nle-track-ctrl-btn" title="锁定">L</button>
+                        </div>
+                    </div>
+                    <div class="nle-track-content">
+                        <div class="nle-track-clips" style="position:relative;">
+                            {plot_clips_html if plot_clips_html else '<span style="color:#555;padding:20px;">暂无剧情节点</span>'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 人物轨道 -->
+                <div class="nle-track nle-track-character">
+                    <div class="nle-track-header">
+                        <div class="nle-track-name"><span class="icon">👤</span> 人物 Char</div>
+                        <div class="nle-track-controls">
+                            <button class="nle-track-ctrl-btn">M</button>
+                            <button class="nle-track-ctrl-btn">S</button>
+                            <button class="nle-track-ctrl-btn">L</button>
+                        </div>
+                    </div>
+                    <div class="nle-track-content">
+                        <div class="nle-track-clips" style="position:relative;">
+                            {char_clips_html if char_clips_html else '<span style="color:#555;padding:20px;">暂无人物数据</span>'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 场景轨道 -->
+                <div class="nle-track nle-track-scene">
+                    <div class="nle-track-header">
+                        <div class="nle-track-name"><span class="icon">🏞️</span> 场景 Scene</div>
+                        <div class="nle-track-controls">
+                            <button class="nle-track-ctrl-btn">M</button>
+                            <button class="nle-track-ctrl-btn">S</button>
+                            <button class="nle-track-ctrl-btn">L</button>
+                        </div>
+                    </div>
+                    <div class="nle-track-content">
+                        <div class="nle-track-clips" style="position:relative;">
+                            {scene_clips_html if scene_clips_html else '<span style="color:#555;padding:20px;">暂无场景数据</span>'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 道具轨道 -->
+                <div class="nle-track nle-track-props">
+                    <div class="nle-track-header">
+                        <div class="nle-track-name"><span class="icon">📦</span> 道具 Props</div>
+                        <div class="nle-track-controls">
+                            <button class="nle-track-ctrl-btn">M</button>
+                            <button class="nle-track-ctrl-btn">S</button>
+                            <button class="nle-track-ctrl-btn">L</button>
+                        </div>
+                    </div>
+                    <div class="nle-track-content">
+                        <div class="nle-track-clips" style="position:relative;">
+                            {props_clips_html if props_clips_html else '<span style="color:#555;padding:20px;">暂无道具数据</span>'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分镜轨道 -->
+                <div class="nle-track nle-track-shot">
+                    <div class="nle-track-header">
+                        <div class="nle-track-name"><span class="icon">🎬</span> 分镜 Shot</div>
+                        <div class="nle-track-controls">
+                            <button class="nle-track-ctrl-btn">M</button>
+                            <button class="nle-track-ctrl-btn">S</button>
+                            <button class="nle-track-ctrl-btn">L</button>
+                        </div>
+                    </div>
+                    <div class="nle-track-content">
+                        <div class="nle-track-clips" style="position:relative;">
+                            {shot_clips_html if shot_clips_html else '<span style="color:#555;padding:20px;">暂无分镜数据</span>'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 详情面板 -->
+        <div class="nle-detail-panel">
+            <div class="nle-detail-title">📋 当前位置: {format_timecode(current_time)}</div>
+            <div class="nle-detail-content">
+                拖动下方时间轴查看各轨道在不同时间点的内容...
+            </div>
+        </div>
+    </div>
+    '''
+
+    return html
+
+
+def load_timeline_data():
+    """加载时间线数据 - 生成 NLE 风格时间线"""
+    global current_video_result
+
+    if not current_video_result:
+        empty_html = generate_nle_timeline_html(0, 0)
+        return (
+            empty_html,
+            gr.update(maximum=100),
+            "00:00:00:00",
+            "", "", "", "", "",  # 隐藏的轨道 HTML
+            None,
+            "### 📋 片段详情\n暂无分析数据，请先在「视频拆解」标签页分析视频",
+            ""
+        )
+
+    duration = current_video_result.get("duration", 100)
+    frames = current_video_result.get("frames", [])
+
+    # 生成 NLE 时间线 HTML
+    nle_html = generate_nle_timeline_html(duration, 0)
+
+    # 获取第一帧预览
+    first_frame = None
+    if frames:
+        first_frame_path = frames[0].get("image_path", "")
+        if os.path.exists(first_frame_path):
+            first_frame = first_frame_path
+
+    return (
+        nle_html,
+        gr.update(maximum=duration, value=0),
+        format_timecode(0),
+        "", "", "", "", "",  # 隐藏的轨道 HTML (兼容)
+        first_frame,
+        f"### 📋 数据加载成功\n- **视频时长**: {format_time_badge(duration)}\n- **总帧数**: {len(frames)}\n- **剧情节点**: {len(current_video_result.get('story_points', []))}\n- **角色数**: {len(current_video_result.get('characters', []))}\n- **场景数**: {len(current_video_result.get('scenes', []))}\n- **分镜数**: {len(current_video_result.get('shots', []))}",
+        ""
+    )
+
+
+def update_timeline_tracks(current_time: float):
+    """更新时间线 - 移动播放头并更新详情"""
+    global current_video_result
+
+    if not current_video_result:
+        empty_html = generate_nle_timeline_html(0, current_time)
+        return (
+            empty_html,
+            format_timecode(current_time),
+            "", "", "", "", "",
+            None,
+            "### 📋 片段详情\n暂无数据",
+            ""
+        )
+
+    duration = current_video_result.get("duration", 100)
+    frames = current_video_result.get("frames", [])
+
+    # 生成更新后的 NLE 时间线 (播放头移动)
+    nle_html = generate_nle_timeline_html(duration, current_time)
+
+    # 找到最近的帧
+    closest_frame = None
+    min_diff = float('inf')
+    for frame in frames:
+        ts = frame.get("timestamp", 0)
+        diff = abs(ts - current_time)
+        if diff < min_diff:
+            min_diff = diff
+            closest_frame = frame
+
+    frame_preview = None
+    ocr_text = ""
+
+    # 获取当前时间点的信息
+    current_point = None
+    for sp in current_video_result.get("story_points", []):
+        if sp.get("timestamp", 0) <= current_time:
+            current_point = sp
+        else:
+            break
+
+    current_scene = None
+    for scene in current_video_result.get("scenes", []):
+        if scene.get("start_time", 0) <= current_time <= scene.get("end_time", float('inf')):
+            current_scene = scene
+            break
+
+    current_shot = None
+    for shot in current_video_result.get("shots", []):
+        if shot.get("timestamp", 0) <= current_time:
+            current_shot = shot
+        else:
+            break
+
+    # 构建详情信息
+    detail_parts = [f"### 📋 时间位置: {format_timecode(current_time)}"]
+
+    if current_point:
+        detail_parts.append(f"\n**🎭 剧情**: {current_point.get('title', '')} ({current_point.get('point_type', '')})")
+
+    if current_scene:
+        detail_parts.append(f"\n**🏞️ 场景**: {current_scene.get('scene_name', '')} - {current_scene.get('atmosphere', '')}")
+
+    if current_shot:
+        detail_parts.append(f"\n**🎬 分镜**: {current_shot.get('shot_type', '')} / {current_shot.get('camera_angle', '')} / {current_shot.get('camera_movement', '')}")
+
+    if closest_frame:
+        frame_path = closest_frame.get("image_path", "")
+        if os.path.exists(frame_path):
+            frame_preview = frame_path
+        ocr_text = closest_frame.get("ocr_text", "")
+        tags = closest_frame.get("tags", [])
+        if tags:
+            detail_parts.append(f"\n**🏷️ 标签**: {', '.join(tags[:5])}")
+
+    frame_info = "\n".join(detail_parts)
+
+    return (
+        nle_html,  # NLE 时间线 (播放头更新)
+        format_timecode(current_time),
+        "", "", "", "", "",  # 隐藏的轨道 HTML (兼容)
+        frame_preview,
+        frame_info,
+        ocr_text
+    )
+
+
 # ========================================
 # API 配置管理
 # ========================================
@@ -3827,21 +6170,110 @@ def format_time_badge(seconds: float) -> str:
 # 全局 API 配置存储
 API_CONFIG = {
     "llm": {"provider": "Claude Code CLI (默认)", "api_key": "", "api_url": ""},
-    "image": {"provider": "通义万相 (推荐)", "api_key": "", "api_url": ""},
+    "image": {"provider": "苍何 API (云端)", "api_key": "", "model": "nano-banana", "backend": "canghe"},
     "video": {"provider": "智谱 CogVideoX (推荐)", "api_key": "", "api_url": ""}
 }
+
+
+def save_canghe_config(provider: str, api_key: str, model: str):
+    """保存苍何 API / ComfyUI 配置"""
+    global API_CONFIG, API_KEY, IMAGE_BACKEND
+
+    from image_generator import set_canghe_api_key, set_canghe_model
+    from ai_creative_generator import set_llm_config
+
+    if "苍何" in provider:
+        # 苍何 API 配置
+        if not api_key:
+            return "⚠️ 请填写苍何 API Key"
+
+        # 保存配置
+        set_canghe_api_key(api_key)
+        API_KEY = api_key
+        IMAGE_BACKEND = "canghe"
+
+        # 设置模型
+        if "即梦" in model or "Jimeng" in model:
+            set_canghe_model("jimeng")
+            model_name = "即梦 (Jimeng)"
+        else:
+            set_canghe_model("nano-banana")
+            model_name = "Nano-Banana (Imagen)"
+
+        API_CONFIG["image"] = {
+            "provider": "苍何 API",
+            "api_key": api_key,
+            "model": model_name,
+            "backend": "canghe"
+        }
+
+        # 如果 LLM 配置为苍何 API，同步更新其 API key
+        llm_config = API_CONFIG.get("llm", {})
+        if "苍何" in llm_config.get("provider", ""):
+            set_llm_config(api_key=api_key)
+            API_CONFIG["llm"]["api_key"] = api_key
+
+        # 保存到配置文件
+        save_user_config()
+
+        return f"✅ 已保存苍何 API 配置\n   模型: {model_name}"
+
+    else:
+        # ComfyUI 配置
+        IMAGE_BACKEND = "comfyui"
+        API_CONFIG["image"] = {
+            "provider": "本地 ComfyUI",
+            "api_key": "",
+            "model": "",
+            "backend": "comfyui"
+        }
+        # 保存到配置文件
+        save_user_config()
+        return "✅ 已切换到本地 ComfyUI"
+
+
+def on_image_provider_change(provider: str):
+    """图像引擎切换时更新 UI"""
+    if "苍何" in provider:
+        return gr.update(visible=True), gr.update(visible=False)
+    else:
+        return gr.update(visible=False), gr.update(visible=True)
 
 def save_llm_config(provider_cn, api_key_cn, api_url_cn, provider_intl, api_key_intl, api_url_intl):
     """保存大语言模型 API 配置"""
     global API_CONFIG
+    from ai_creative_generator import set_llm_config
+
     # 优先使用国内配置
-    if provider_cn and api_key_cn:
+    if provider_cn:
+        api_url = api_url_cn or get_default_llm_url(provider_cn)
+
+        # 苍何 API 特殊处理：如果没有单独填写 API Key，尝试使用图像配置的 key
+        actual_api_key = api_key_cn
+        if "苍何" in provider_cn and not actual_api_key:
+            # 尝试从图像配置获取 API Key
+            from image_generator import _canghe_api_key
+            if _canghe_api_key:
+                actual_api_key = _canghe_api_key
+
         API_CONFIG["llm"] = {
             "provider": provider_cn,
-            "api_key": api_key_cn,
-            "api_url": api_url_cn or get_default_llm_url(provider_cn),
+            "api_key": actual_api_key,
+            "api_url": api_url,
             "region": "cn"
         }
+
+        # 同步配置到 ai_creative_generator 模块
+        set_llm_config(provider=provider_cn, api_key=actual_api_key, api_url=api_url)
+
+        # 保存到配置文件
+        save_user_config()
+
+        if "苍何" in provider_cn:
+            if actual_api_key:
+                return f"✅ 已保存 LLM 配置: {provider_cn}（使用苍何 API）"
+            else:
+                return f"⚠️ 已保存 LLM 配置: {provider_cn}，但未设置 API Key（请在图像生成配置中设置）"
         return f"✅ 已保存 LLM 配置: {provider_cn}"
     elif provider_intl and api_key_intl:
         API_CONFIG["llm"] = {
@@ -3850,8 +6282,17 @@ def save_llm_config(provider_cn, api_key_cn, api_url_cn, provider_intl, api_key_
             "api_url": api_url_intl or get_default_llm_url(provider_intl),
             "region": "intl"
         }
+        # 同步配置到 ai_creative_generator 模块
+        set_llm_config(provider=provider_intl, api_key=api_key_intl, api_url=api_url_intl or get_default_llm_url(provider_intl))
+        # 保存到配置文件
+        save_user_config()
         return f"✅ 已保存 LLM 配置: {provider_intl}"
-    return "⚠️ 请选择服务商并填写 API Key"
+
+    # 如果没有填写任何配置，设置为 Claude CLI 模式
+    set_llm_config(provider="Claude Code CLI (默认)", api_key="", api_url="")
+    API_CONFIG["llm"] = {"provider": "Claude Code CLI (默认)", "api_key": "", "api_url": "", "region": "cn"}
+    save_user_config()
+    return "✅ 已设置为 Claude Code CLI 模式"
 
 def save_image_config(provider_cn, api_key_cn, api_url_cn, provider_intl, api_key_intl, api_url_intl):
     """保存图像生成 API 配置"""
@@ -3898,6 +6339,7 @@ def save_video_config(provider_cn, api_key_cn, api_url_cn, provider_intl, api_ke
 def get_default_llm_url(provider):
     """获取 LLM 默认 API 地址"""
     urls = {
+        "苍何 API": "https://api.canghe.ai/v1/chat/completions",
         "DeepSeek": "https://api.deepseek.com/chat/completions",
         "智谱 GLM (推荐)": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
         "智谱 GLM": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
@@ -3948,11 +6390,288 @@ import queue
 
 # 全局 CLI 输出队列
 cli_output_queue = queue.Queue()
-cli_output_history = []
+cli_output_history = ["[系统] AI Storyboard Pro v2.2 已启动", "[系统] CLI 实时监控已就绪，等待 API 调用..."]
+
+# ============================================
+# API 调用监控系统
+# ============================================
+api_monitor = {
+    "is_calling": False,           # 是否正在调用 API
+    "current_provider": "",        # 当前调用的服务商
+    "total_tokens": 0,             # 总 token 消耗
+    "session_tokens": 0,           # 本次会话 token
+    "call_count": 0,               # 调用次数
+    "last_call_time": "",          # 最后调用时间
+    "call_history": [],            # 调用历史记录
+}
+
+
+def api_monitor_start(provider: str):
+    """开始 API 调用监控"""
+    global api_monitor
+    import datetime
+    api_monitor["is_calling"] = True
+    api_monitor["current_provider"] = provider
+    api_monitor["last_call_time"] = datetime.datetime.now().strftime("%H:%M:%S")
+
+
+def api_monitor_end(provider: str, tokens_used: int = 0, success: bool = True):
+    """结束 API 调用监控"""
+    global api_monitor
+    import datetime
+    api_monitor["is_calling"] = False
+    api_monitor["call_count"] += 1
+    api_monitor["total_tokens"] += tokens_used
+    api_monitor["session_tokens"] += tokens_used
+
+    # 记录调用历史
+    status = "✓" if success else "✗"
+    record = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {status} {provider}: {tokens_used} tokens"
+    api_monitor["call_history"].insert(0, record)
+    # 只保留最近 20 条
+    if len(api_monitor["call_history"]) > 20:
+        api_monitor["call_history"] = api_monitor["call_history"][:20]
+
+
+def get_api_monitor_html():
+    """获取 API 监控面板 HTML"""
+    global api_monitor
+
+    is_calling = api_monitor["is_calling"]
+    provider = api_monitor["current_provider"] or "无"
+    total_tokens = api_monitor["total_tokens"]
+    session_tokens = api_monitor["session_tokens"]
+    call_count = api_monitor["call_count"]
+
+    # 状态指示器
+    if is_calling:
+        status_class = "calling"
+        status_icon = "🔵"
+        status_text = f"正在调用: {provider}"
+    else:
+        status_class = "idle"
+        status_icon = "⚪"
+        status_text = "空闲"
+
+    # 调用历史
+    history_html = ""
+    for record in api_monitor["call_history"][:5]:
+        history_html += f'<div class="api-log-item">{record}</div>'
+
+    if not history_html:
+        history_html = '<div class="api-log-item empty">暂无调用记录</div>'
+
+    html = f'''
+    <div class="api-monitor-panel">
+        <div class="api-monitor-header">
+            <span class="api-status-indicator {status_class}">{status_icon}</span>
+            <span class="api-status-text">{status_text}</span>
+        </div>
+        <div class="api-stats">
+            <div class="stat-item">
+                <span class="stat-label">调用次数</span>
+                <span class="stat-value">{call_count}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">本次 Tokens</span>
+                <span class="stat-value tokens">{session_tokens:,}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">累计 Tokens</span>
+                <span class="stat-value">{total_tokens:,}</span>
+            </div>
+        </div>
+        <div class="api-log-container">
+            <div class="api-log-title">📋 调用记录</div>
+            {history_html}
+        </div>
+    </div>
+    '''
+    return html
+
+
+def reset_session_tokens():
+    """重置本次会话 token 计数"""
+    global api_monitor
+    api_monitor["session_tokens"] = 0
+    api_monitor["call_count"] = 0
+    api_monitor["call_history"] = []
+    return get_api_monitor_html()
+
+
+def test_api_channels():
+    """测试 API 各渠道连接状态，返回状态 HTML"""
+    import requests
+
+    # 尝试多种方式获取 API Key
+    saved_config = get_saved_unified_config()
+    api_key = saved_config.get("api_key", "")
+
+    # Fallback: 从 settings 读取
+    if not api_key:
+        try:
+            api_key = settings.api_key if settings.api_key != "your_api_key_here" else ""
+        except:
+            pass
+
+    # Fallback: 从环境变量读取
+    if not api_key:
+        api_key = os.environ.get("CANGHE_API_KEY", "")
+
+    if not api_key:
+        return '''
+        <div class="api-test-panel">
+            <div class="api-test-header">🔌 API 连接测试</div>
+            <div class="api-test-error">❌ 未配置 API Key</div>
+        </div>
+        '''
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    # 测试各个模型
+    test_models = [
+        ("文字 - gemini-2.0-flash", "https://api.canghe.ai/v1/chat/completions",
+         {"model": "gemini-2.0-flash", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}),
+        ("文字 - gpt-4o", "https://api.canghe.ai/v1/chat/completions",
+         {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5}),
+        ("图像 - DALL-E 3", "https://api.canghe.ai/v1/images/generations",
+         {"model": "dall-e-3", "prompt": "test", "n": 1, "size": "1024x1024"}),
+        ("图像 - Nano-Banana", "https://api.canghe.ai/fal-ai/nano-banana",
+         {"prompt": "test", "num_images": 1}),
+        ("视频 - 即梦", "https://api.canghe.ai/jimeng/submit/videos",
+         {"prompt": "test", "aspect_ratio": "16:9"}),
+    ]
+
+    results_html = ""
+    available_count = 0
+
+    for name, url, payload in test_models:
+        try:
+            # 只测试连接，设置很短的超时
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            data = resp.json()
+
+            if "error" in data:
+                error_msg = data.get("error", {}).get("message_zh", "") or data.get("error", {}).get("message", "")
+                if "无可用渠道" in error_msg or "饱和" in error_msg:
+                    results_html += f'''
+                    <div class="api-channel error">
+                        <span class="channel-name">{name}</span>
+                        <span class="channel-status">❌ {error_msg[:30]}</span>
+                    </div>'''
+                else:
+                    results_html += f'''
+                    <div class="api-channel warning">
+                        <span class="channel-name">{name}</span>
+                        <span class="channel-status">⚠️ {error_msg[:30]}</span>
+                    </div>'''
+            else:
+                available_count += 1
+                results_html += f'''
+                <div class="api-channel success">
+                    <span class="channel-name">{name}</span>
+                    <span class="channel-status">✅ 可用</span>
+                </div>'''
+        except requests.exceptions.Timeout:
+            results_html += f'''
+            <div class="api-channel warning">
+                <span class="channel-name">{name}</span>
+                <span class="channel-status">⏱️ 超时</span>
+            </div>'''
+        except Exception as e:
+            results_html += f'''
+            <div class="api-channel error">
+                <span class="channel-name">{name}</span>
+                <span class="channel-status">❌ 错误</span>
+            </div>'''
+
+    status_class = "success" if available_count >= 2 else ("warning" if available_count >= 1 else "error")
+
+    return f'''
+    <div class="api-test-panel">
+        <div class="api-test-header {status_class}">
+            🔌 API 渠道状态 ({available_count}/4 可用)
+        </div>
+        <div class="api-channels">
+            {results_html}
+        </div>
+    </div>
+    <style>
+        .api-test-panel {{
+            background: var(--card-dark);
+            border: 1px solid var(--border-dark);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 8px;
+        }}
+        .api-test-header {{
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 8px;
+        }}
+        .api-test-header.success {{ color: #22c55e; }}
+        .api-test-header.warning {{ color: #f59e0b; }}
+        .api-test-header.error {{ color: #ef4444; }}
+        .api-test-error {{
+            color: #ef4444;
+            font-size: 12px;
+            padding: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            border-radius: 4px;
+        }}
+        .api-channels {{
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }}
+        .api-channel {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+        }}
+        .api-channel.success {{
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }}
+        .api-channel.warning {{
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }}
+        .api-channel.error {{
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }}
+        .channel-name {{
+            color: white;
+            font-weight: 500;
+        }}
+        .channel-status {{
+            color: var(--text-secondary);
+            font-size: 10px;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+        .api-channel.error .channel-status {{
+            color: #fca5a5;
+        }}
+    </style>
+    '''
+
 
 def call_claude_cli(prompt: str, system_prompt: str = "") -> str:
     """通过 Claude Code CLI 调用 AI（默认方式）"""
     global cli_output_history
+    import shutil
+    import platform
 
     try:
         # 构建完整提示
@@ -3960,35 +6679,78 @@ def call_claude_cli(prompt: str, system_prompt: str = "") -> str:
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
 
+        # 开始监控
+        api_monitor_start("Claude CLI")
         # 添加到 CLI 输出
         cli_output_history.append(f"[发送] {prompt[:100]}...")
 
+        # 查找 claude 命令
+        claude_cmd = None
+        is_windows = platform.system() == "Windows"
+
+        # 尝试查找 claude 命令
+        if is_windows:
+            # Windows 上尝试多种方式
+            for cmd in ["claude.cmd", "claude.exe", "claude"]:
+                if shutil.which(cmd):
+                    claude_cmd = cmd
+                    break
+        else:
+            claude_cmd = shutil.which("claude")
+
+        if not claude_cmd:
+            api_monitor_end("Claude CLI", 0, False)
+            cli_output_history.append("[错误] 未找到 claude 命令")
+            return "⚠️ 未找到 claude 命令，请确保 Claude Code CLI 已安装并在 PATH 中"
+
         # 调用 claude 命令行 (使用 -p 传递提示词，--output-format text 获取纯文本输出)
-        result = subprocess.run(
-            ["claude", "-p", full_prompt, "--output-format", "text"],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            encoding='utf-8',
-            errors='replace'
-        )
+        # Windows 上使用 shell=True 确保正确执行
+        if is_windows:
+            # 转义引号
+            escaped_prompt = full_prompt.replace('"', '\\"')
+            cmd_str = f'"{claude_cmd}" -p "{escaped_prompt}" --output-format text'
+            result = subprocess.run(
+                cmd_str,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                encoding='utf-8',
+                errors='replace',
+                shell=True
+            )
+        else:
+            result = subprocess.run(
+                [claude_cmd, "-p", full_prompt, "--output-format", "text"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                encoding='utf-8',
+                errors='replace'
+            )
 
         if result.returncode == 0:
             output = result.stdout.strip()
-            cli_output_history.append(f"[接收] {output[:200]}...")
+            # 估算 token 消耗（输入 + 输出）
+            tokens_estimate = (len(full_prompt) + len(output)) // 4
+            api_monitor_end("Claude CLI", tokens_estimate, True)
+            cli_output_history.append(f"[接收] {output[:200]}... ({tokens_estimate} tokens)")
             return output
         else:
+            api_monitor_end("Claude CLI", 0, False)
             error_msg = result.stderr.strip() if result.stderr else "未知错误"
             cli_output_history.append(f"[错误] {error_msg[:100]}")
             return f"⚠️ CLI 调用失败: {error_msg}"
 
     except subprocess.TimeoutExpired:
+        api_monitor_end("Claude CLI", 0, False)
         cli_output_history.append("[超时] Claude CLI 响应超时")
         return "⚠️ Claude CLI 响应超时，请稍后重试"
     except FileNotFoundError:
+        api_monitor_end("Claude CLI", 0, False)
         cli_output_history.append("[错误] 未找到 claude 命令")
         return "⚠️ 未找到 claude 命令，请确保 Claude Code CLI 已安装并在 PATH 中"
     except Exception as e:
+        api_monitor_end("Claude CLI", 0, False)
         cli_output_history.append(f"[错误] {str(e)[:100]}")
         return f"⚠️ 调用出错: {str(e)}"
 
@@ -4005,7 +6767,8 @@ def get_cli_output() -> str:
 def clear_cli_output() -> str:
     """清空 CLI 输出"""
     global cli_output_history
-    cli_output_history = []
+    cli_output_history = ["[系统] CLI 日志已清空", "[系统] 等待新的 API 调用..."]
+    return "\n".join(cli_output_history)
     return "已清空"
 
 
@@ -4016,16 +6779,23 @@ def call_llm_api(prompt: str, system_prompt: str = "") -> str:
     llm_config = API_CONFIG.get("llm", {})
     provider = llm_config.get("provider", "Claude Code CLI (默认)")
 
-    # 默认使用 Claude Code CLI
-    if "Claude Code CLI" in provider or not llm_config.get("api_key"):
+    # 默认使用 Claude Code CLI（仅当明确选择 CLI 模式时）
+    if "Claude Code CLI" in provider:
         return call_claude_cli(prompt, system_prompt)
+
+    # 苍何 API 特殊处理：尝试获取共享的 API Key
+    if "苍何" in provider:
+        api_key = llm_config.get("api_key", "")
+        if not api_key:
+            from image_generator import _canghe_api_key
+            api_key = _canghe_api_key
+        if not api_key:
+            return "⚠️ 苍何 API Key 未配置，请在图像生成或语言模型配置中设置"
+        # 继续使用苍何 API，不回退
 
     # 其他 API 调用方式
     api_key = llm_config.get("api_key", "")
     api_url = llm_config.get("api_url", "")
-
-    if not api_key:
-        return call_claude_cli(prompt, system_prompt)  # 没有配置 API 时使用 CLI
 
     if not api_url:
         api_url = get_default_llm_url(provider)
@@ -4126,6 +6896,54 @@ def call_llm_api(prompt: str, system_prompt: str = "") -> str:
                 result = response.json()
                 return result.get("choices", [{}])[0].get("message", {}).get("content", "生成失败")
             else:
+                return f"API 调用失败: {response.status_code} - {response.text[:100]}"
+
+        # 苍何 API 格式 (OpenAI 兼容)
+        elif "苍何" in provider or "canghe" in api_url:
+            # 优先使用图像生成配置中的 API Key
+            canghe_key = api_key
+            if not canghe_key:
+                from image_generator import _canghe_api_key
+                canghe_key = _canghe_api_key
+            if not canghe_key:
+                canghe_key = API_CONFIG.get("image", {}).get("api_key", "")
+
+            if not canghe_key:
+                return "⚠️ 请先在图像生成或语言模型配置中设置苍何 API Key"
+
+            headers = {
+                "Authorization": f"Bearer {canghe_key}",
+                "Content-Type": "application/json"
+            }
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            data = {
+                "model": "gpt-3.5-turbo",
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 2048
+            }
+
+            # 开始监控
+            api_monitor_start("苍何 API")
+            cli_output_history.append(f"[苍何 API] 调用 chat/completions...")
+
+            response = requests.post(api_url, headers=headers, json=data, timeout=60)
+            if response.status_code == 200:
+                result = response.json()
+                content = result.get("choices", [{}])[0].get("message", {}).get("content", "生成失败")
+                # 获取 token 使用量
+                usage = result.get("usage", {})
+                tokens_used = usage.get("total_tokens", len(content) // 4)  # 估算
+                api_monitor_end("苍何 API", tokens_used, True)
+                cli_output_history.append(f"[苍何 API] ✓ 生成成功 ({len(content)} 字符, {tokens_used} tokens)")
+                return content
+            else:
+                api_monitor_end("苍何 API", 0, False)
+                cli_output_history.append(f"[苍何 API] ✗ 失败: {response.status_code}")
                 return f"API 调用失败: {response.status_code} - {response.text[:100]}"
 
         # OpenAI 兼容格式 (默认)
@@ -4248,34 +7066,85 @@ def ai_optimize_prompt(original_prompt: str, style: str = "电影感") -> str:
 
 
 def ai_generate_project_summary() -> str:
-    """AI 生成项目摘要"""
+    """AI 生成项目摘要 - 改进版"""
     global current_project
 
-    if not current_project or (not current_project.characters and not current_project.shots):
+    if not current_project:
         return "项目为空，无法生成摘要"
 
-    # 收集项目信息
-    char_names = [c.name for c in current_project.characters]
-    scene_names = [s.name for s in current_project.scenes]
+    # 检查是否有足够的内容生成摘要
+    has_content = (current_project.characters or current_project.scenes or current_project.shots)
+    if not has_content:
+        return "项目内容为空，请先添加角色、场景或镜头后再生成摘要"
+
+    # 收集详细的项目信息
+    # 角色信息（包含描述）
+    char_info = []
+    for c in current_project.characters:
+        char_desc = c.description[:50] + "..." if len(c.description) > 50 else c.description
+        char_info.append(f"{c.name}: {char_desc}" if char_desc else c.name)
+
+    # 场景信息（包含描述）
+    scene_info = []
+    for s in current_project.scenes:
+        scene_desc = s.description[:50] + "..." if len(s.description) > 50 else s.description
+        scene_info.append(f"{s.name}: {scene_desc}" if scene_desc else s.name)
+
+    # 镜头统计
     shot_count = len(current_project.shots)
-    shot_types = [s.template.value if hasattr(s.template, 'value') else str(s.template) for s in current_project.shots]
+    completed_shots = sum(1 for s in current_project.shots if s.output_image)
+    video_shots = sum(1 for s in current_project.shots if s.output_video)
 
-    system_prompt = """你是一个专业的分镜项目分析师。
-请根据项目信息生成一份简洁的项目摘要，包括：
-1. 项目规模概述
-2. 主要角色介绍
-3. 场景设定
-4. 镜头安排特点
-5. 整体风格建议
-控制在200字以内，语言专业但易懂。"""
+    # 镜头类型分布统计
+    shot_type_count = {}
+    for s in current_project.shots:
+        template = get_template(s.template)
+        type_name = template.name_cn if template else "标准"
+        shot_type_count[type_name] = shot_type_count.get(type_name, 0) + 1
+    shot_type_distribution = ", ".join([f"{k}({v}个)" for k, v in shot_type_count.items()])
 
-    prompt = f"""项目信息:
-- 角色 ({len(char_names)}个): {', '.join(char_names) if char_names else '无'}
-- 场景 ({len(scene_names)}个): {', '.join(scene_names) if scene_names else '无'}
-- 镜头数量: {shot_count}
-- 镜头类型分布: {', '.join(set(shot_types)) if shot_types else '无'}
+    # 收集部分镜头描述作为故事概要
+    shot_descriptions = []
+    for s in current_project.shots[:5]:  # 取前5个镜头的描述
+        if s.description:
+            shot_descriptions.append(f"镜头{s.shot_number}: {s.description[:40]}...")
 
-请生成项目摘要："""
+    system_prompt = """你是一个专业的影视项目分析师，擅长从分镜信息中提炼项目核心。
+请根据提供的详细项目信息，生成一份专业的项目摘要。
+
+摘要结构要求：
+1. **项目概述**: 一句话总结项目规模和完成度
+2. **故事梗概**: 根据角色、场景和镜头描述推断故事主线（2-3句话）
+3. **角色阵容**: 简述主要角色及其特点
+4. **场景设定**: 描述主要场景的风格和氛围
+5. **镜头风格**: 根据镜头类型分布分析拍摄风格特点
+6. **制作建议**: 给出1-2条专业建议
+
+要求：
+- 语言专业但通俗易懂
+- 总字数控制在300字以内
+- 要有洞察力，不要只是罗列数据
+- 如果信息不足，合理推断并标注"""
+
+    prompt = f"""项目名称: {current_project.name}
+画面比例: {current_project.aspect_ratio}
+
+【角色信息】({len(current_project.characters)}个)
+{chr(10).join(char_info) if char_info else "暂无角色"}
+
+【场景信息】({len(current_project.scenes)}个)
+{chr(10).join(scene_info) if scene_info else "暂无场景"}
+
+【镜头统计】
+- 总镜头数: {shot_count}
+- 已生成图片: {completed_shots}/{shot_count}
+- 已生成视频: {video_shots}/{shot_count}
+- 镜头类型分布: {shot_type_distribution if shot_type_distribution else "无"}
+
+【部分镜头描述】
+{chr(10).join(shot_descriptions) if shot_descriptions else "暂无镜头描述"}
+
+请根据以上信息生成项目摘要："""
 
     result = call_llm_api(prompt, system_prompt)
     return result
@@ -4350,8 +7219,7 @@ def create_ui():
 
         # ===== 全局样式 =====
         gr.HTML("""
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1" rel="stylesheet">
+        <!-- Google Fonts 已移除以加快启动速度，使用系统字体替代 -->
         <style>
             /* ===== 全局深色主题 ===== */
             :root {
@@ -4367,7 +7235,7 @@ def create_ui():
 
             body, .gradio-container {
                 background: var(--bg-dark) !important;
-                font-family: 'Inter', system-ui, sans-serif !important;
+                font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
             }
 
             /* 隐藏行不占空间 */
@@ -4914,6 +7782,182 @@ def create_ui():
             /* 标签内的列元素 */
             .tabs > .tabitem .column {
                 padding: 0 8px !important;
+            }
+
+            /* ===== 所有标签页统一宽度 ===== */
+            /* 确保所有标签页（普通+高级模式）宽度一致 */
+            #tab-create,
+            #tab-arrange,
+            #tab-generate,
+            #tab-export,
+            #tab-ai-creative,
+            #tab-video-analysis,
+            #tab-timeline-viz {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* 所有标签页内嵌套标签页宽度 */
+            #tab-create .tabs,
+            #tab-arrange .tabs,
+            #tab-generate .tabs,
+            #tab-export .tabs,
+            #tab-ai-creative .tabs,
+            #tab-video-analysis .tabs,
+            #tab-timeline-viz .tabs {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            #tab-create .tabs > .tabitem,
+            #tab-arrange .tabs > .tabitem,
+            #tab-generate .tabs > .tabitem,
+            #tab-export .tabs > .tabitem,
+            #tab-ai-creative .tabs > .tabitem,
+            #tab-video-analysis .tabs > .tabitem,
+            #tab-timeline-viz .tabs > .tabitem {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* 所有标签页内Row和Column布局 */
+            #tab-create .row,
+            #tab-arrange .row,
+            #tab-generate .row,
+            #tab-export .row,
+            #tab-ai-creative .row,
+            #tab-video-analysis .row,
+            #tab-timeline-viz .row {
+                width: 100% !important;
+                margin: 0 !important;
+                display: flex !important;
+            }
+
+            #tab-create .column,
+            #tab-arrange .column,
+            #tab-generate .column,
+            #tab-export .column,
+            #tab-ai-creative .column,
+            #tab-video-analysis .column,
+            #tab-timeline-viz .column {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            /* 所有标签页内主要容器不超宽 */
+            #tab-create > *,
+            #tab-arrange > *,
+            #tab-generate > *,
+            #tab-export > *,
+            #tab-ai-creative > *,
+            #tab-video-analysis > *,
+            #tab-timeline-viz > * {
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* 所有标签页内嵌套元素宽度控制 */
+            #tab-create .block,
+            #tab-arrange .block,
+            #tab-generate .block,
+            #tab-export .block,
+            #tab-ai-creative .block,
+            #tab-video-analysis .block,
+            #tab-timeline-viz .block,
+            #tab-create .form,
+            #tab-arrange .form,
+            #tab-generate .form,
+            #tab-export .form,
+            #tab-ai-creative .form,
+            #tab-video-analysis .form,
+            #tab-timeline-viz .form {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            /* 修复所有标签页内子标签导航栏 */
+            #tab-create .tabs > .tab-nav,
+            #tab-arrange .tabs > .tab-nav,
+            #tab-generate .tabs > .tab-nav,
+            #tab-export .tabs > .tab-nav,
+            #tab-ai-creative .tabs > .tab-nav,
+            #tab-video-analysis .tabs > .tab-nav,
+            #tab-timeline-viz .tabs > .tab-nav {
+                width: 100% !important;
+                flex-wrap: wrap !important;
+            }
+
+            /* 所有标签页内输入元素宽度 */
+            #tab-create input,
+            #tab-create textarea,
+            #tab-create select,
+            #tab-arrange input,
+            #tab-arrange textarea,
+            #tab-arrange select,
+            #tab-generate input,
+            #tab-generate textarea,
+            #tab-generate select,
+            #tab-export input,
+            #tab-export textarea,
+            #tab-export select,
+            #tab-ai-creative input,
+            #tab-ai-creative textarea,
+            #tab-ai-creative select,
+            #tab-video-analysis input,
+            #tab-video-analysis textarea,
+            #tab-video-analysis select,
+            #tab-timeline-viz input,
+            #tab-timeline-viz textarea,
+            #tab-timeline-viz select {
+                max-width: 100% !important;
+            }
+
+            /* 所有标签页内Accordion宽度 */
+            #tab-create .accordion,
+            #tab-arrange .accordion,
+            #tab-generate .accordion,
+            #tab-export .accordion,
+            #tab-ai-creative .accordion,
+            #tab-video-analysis .accordion,
+            #tab-timeline-viz .accordion {
+                width: 100% !important;
+            }
+
+            /* 所有标签页内Dataframe宽度 */
+            #tab-create .dataframe,
+            #tab-arrange .dataframe,
+            #tab-generate .dataframe,
+            #tab-export .dataframe,
+            #tab-ai-creative .dataframe,
+            #tab-video-analysis .dataframe,
+            #tab-timeline-viz .dataframe {
+                width: 100% !important;
+                overflow-x: auto !important;
+            }
+
+            /* 所有标签页内图片容器宽度 */
+            #tab-create .image-container,
+            #tab-arrange .image-container,
+            #tab-generate .image-container,
+            #tab-export .image-container,
+            #tab-ai-creative .image-container,
+            #tab-video-analysis .image-container,
+            #tab-timeline-viz .image-container {
+                max-width: 100% !important;
+            }
+
+            #tab-create img,
+            #tab-arrange img,
+            #tab-generate img,
+            #tab-export img,
+            #tab-ai-creative img,
+            #tab-video-analysis img,
+            #tab-timeline-viz img {
+                max-width: 100% !important;
+                height: auto !important;
             }
 
             /* ===== 前序内容摘要卡片 ===== */
@@ -5490,24 +8534,157 @@ def create_ui():
         </style>
         """)
 
-        # ===== 主布局：左侧内容 + 右侧面板 =====
-        with gr.Row(equal_height=False):
+        # ===== 顶部：苍何 API 统一配置面板（紧凑版）=====
+        _unified_config = get_saved_unified_config()
+        gr.HTML("""
+        <style>
+            .canghe-top-bar {
+                background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%);
+                border: 1px solid rgba(59, 130, 246, 0.25);
+                border-radius: 12px;
+                padding: 12px 20px;
+                margin-bottom: 16px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                flex-wrap: wrap;
+            }
+            .canghe-top-bar .canghe-brand {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 180px;
+            }
+            .canghe-top-bar .canghe-logo {
+                font-size: 24px;
+            }
+            .canghe-top-bar .canghe-title {
+                font-size: 14px;
+                font-weight: 600;
+                color: #93c5fd;
+                margin: 0;
+            }
+            .canghe-top-bar .canghe-subtitle {
+                font-size: 10px;
+                color: #64748b;
+                margin: 0;
+            }
+            .canghe-top-bar .canghe-status {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                padding: 4px 10px;
+                border-radius: 12px;
+                font-size: 11px;
+            }
+            .canghe-top-bar .canghe-status-ok {
+                background: rgba(34, 197, 94, 0.15);
+                color: #4ade80;
+                border: 1px solid rgba(34, 197, 94, 0.25);
+            }
+            .canghe-top-bar .canghe-status-error {
+                background: rgba(239, 68, 68, 0.15);
+                color: #f87171;
+                border: 1px solid rgba(239, 68, 68, 0.25);
+            }
+            .canghe-config-compact {
+                background: rgba(30, 41, 59, 0.5);
+                border: 1px solid rgba(59, 130, 246, 0.2);
+                border-radius: 10px;
+                padding: 12px 16px;
+                margin-bottom: 12px;
+            }
+            .canghe-config-compact .gr-form {
+                gap: 8px !important;
+            }
+            .canghe-config-compact .gr-box {
+                background: transparent !important;
+                border: none !important;
+            }
+            .canghe-config-compact label {
+                font-size: 11px !important;
+                color: #94a3b8 !important;
+            }
+            .canghe-config-compact .gr-checkbox {
+                min-height: auto !important;
+            }
+            .canghe-config-compact .gr-checkbox label {
+                font-size: 12px !important;
+                padding: 4px 8px !important;
+            }
+        </style>
+        """)
+
+        with gr.Accordion("🌊 苍何 API 配置（点击展开设置）", open=False, elem_classes="canghe-config-compact"):
+            canghe_status_display = gr.HTML(value=get_canghe_api_status())
+
+            with gr.Row():
+                canghe_unified_key = gr.Textbox(
+                    label="API Key",
+                    placeholder="输入苍何 API Key",
+                    type="password",
+                    value=_unified_config.get("api_key", ""),
+                    scale=3
+                )
+                canghe_image_model = gr.Dropdown(
+                    ["Nano-Banana (Imagen)", "即梦 (Jimeng)"],
+                    label="图像模型",
+                    value="即梦 (Jimeng)" if "jimeng" in _unified_config.get("image_model", "") else "Nano-Banana (Imagen)",
+                    scale=2
+                )
+                canghe_video_model = gr.Dropdown(
+                    ["veo3.1-fast", "veo3.1", "veo3.1-pro", "veo3-fast", "jimeng-video-3.0"],
+                    label="视频模型",
+                    value=_unified_config.get("video_model", "veo3.1-fast"),
+                    scale=2
+                )
+
+            with gr.Row():
+                canghe_llm_enabled = gr.Checkbox(
+                    label="📝 文字",
+                    value=_unified_config.get("llm_enabled", True),
+                    scale=1
+                )
+                canghe_img_enabled = gr.Checkbox(
+                    label="🎨 图像",
+                    value=_unified_config.get("image_enabled", True),
+                    scale=1
+                )
+                canghe_video_enabled = gr.Checkbox(
+                    label="🎬 视频",
+                    value=_unified_config.get("video_enabled", True),
+                    scale=1
+                )
+                canghe_save_btn = gr.Button("💾 保存", variant="primary", size="sm", scale=1)
+                canghe_save_status = gr.Textbox(
+                    label="",
+                    show_label=False,
+                    interactive=False,
+                    container=False,
+                    scale=2,
+                    placeholder="点击保存应用配置"
+                )
+
+        # ===== 主布局：左侧工作区 + 右侧设置面板 =====
+        with gr.Row(equal_height=False, elem_classes="main-layout-row"):
 
             # ===== 左侧：主工作区 (80%) =====
-            with gr.Column(scale=4):
+            with gr.Column(scale=4, elem_classes="main-left-column"):
 
-                # 项目状态概览 (可见，显示加载的范例内容)
-                project_summary = gr.HTML(value=get_project_summary(), elem_classes="project-summary-card")
+                # 工作流进度指示器 (在左侧顶部，紧凑显示)
+                workflow_step_indicator = gr.HTML(value=get_workflow_indicator(0), elem_classes="workflow-indicator")
 
-                # ===== 新手快速开始区域 =====
-                gr.HTML("""
-                <div class="quick-start-banner">
-                    <div class="qs-icon">🚀</div>
-                    <div class="qs-content">
-                        <h3>新手？一键开始体验</h3>
-                        <p>点击下方任意范例模板，立即加载完整的角色、场景和镜头数据，快速了解系统工作流程。</p>
+                # ===== 快速开始区域（折叠）=====
+                with gr.Accordion("🚀 快速开始（范例模板）", open=False):
+                    # 项目状态概览
+                    project_summary = gr.HTML(value=get_project_summary(), elem_classes="project-summary-card")
+
+                    gr.HTML("""
+                    <div class="quick-start-banner">
+                        <div class="qs-content">
+                            <p>点击下方范例模板，立即加载完整的角色、场景和镜头数据</p>
+                        </div>
                     </div>
-                </div>
                 <style>
                     .quick-start-banner {
                         background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 25, 34, 0.95) 100%);
@@ -5789,7 +8966,7 @@ def create_ui():
                 </style>
                 """)
 
-                # 快速导航按钮
+                # 快速导航按钮（在折叠区内）
                 with gr.Row(elem_classes="workflow-nav-buttons"):
                     nav_create_btn = gr.Button("① 创建角色/场景", size="sm", elem_id="nav-create")
                     nav_arrange_btn = gr.Button("② 编排镜头", size="sm", elem_id="nav-arrange")
@@ -5813,7 +8990,24 @@ def create_ui():
                     example_desc = gr.Textbox(label="说明", interactive=False, lines=2)
 
             # ===== 右侧：设置面板 (20%) =====
-            with gr.Column(scale=1, min_width=280):
+            with gr.Column(scale=1, min_width=280, elem_classes="main-right-column"):
+
+                # API 调用监控 (移到右侧顶部)
+                api_monitor_html = gr.HTML(
+                    value=get_api_monitor_html(),
+                    elem_id="api-monitor-display"
+                )
+                with gr.Row():
+                    refresh_monitor_btn = gr.Button("🔄 刷新", size="sm", scale=1)
+                    reset_tokens_btn = gr.Button("🗑️ 重置计数", size="sm", scale=1)
+
+                # API 连接测试面板 - 实时显示渠道状态
+                gr.HTML('<div class="section-title" style="margin-top:8px;">🔌 API 渠道实时状态</div>')
+                api_test_html = gr.HTML(
+                    value=test_api_channels(),  # 启动时自动检测
+                    elem_id="api-test-display"
+                )
+                test_api_btn = gr.Button("🔄 刷新渠道状态", size="sm", variant="secondary")
 
                 # ComfyUI 连接状态
                 with gr.Group(elem_classes="comfyui-status-container"):
@@ -5830,9 +9024,9 @@ def create_ui():
                 # LLM 设置
                 with gr.Accordion("🤖 语言模型", open=False):
                     llm_provider_cn = gr.Radio(
-                        ["Claude Code CLI (默认)", "DeepSeek", "智谱 GLM", "通义千问", "OpenAI GPT"],
+                        ["Claude Code CLI (默认)", "苍何 API", "DeepSeek", "智谱 GLM", "通义千问", "OpenAI GPT"],
                         label="",
-                        value="Claude Code CLI (默认)",
+                        value=get_saved_llm_provider(),
                         container=False
                     )
                     llm_api_key_cn = gr.Textbox(
@@ -5853,49 +9047,84 @@ def create_ui():
                     llm_save_btn = gr.Button("保存配置", elem_classes="primary-btn", size="sm")
                     llm_save_status = gr.Textbox(label="", show_label=False, interactive=False, container=False)
 
-                # 图像生成配置 - 简化版
+                # 图像生成配置 - 苍何 API / ComfyUI
                 with gr.Accordion("🎨 图像生成", open=False):
+                    gr.HTML("""
+                    <div style="padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                        <span style="color: #93c5fd; font-size: 12px;">💡 苍何 API 配置请在页面顶部「🌊 苍何 API 配置」中设置</span>
+                    </div>
+                    """)
+                    _saved_backend = get_saved_image_backend()
                     img_provider_cn = gr.Radio(
-                        ["本地 ComfyUI (默认)", "通义万相", "智谱 CogView", "Stability AI"],
+                        ["苍何 API (云端)", "本地 ComfyUI"],
                         label="选择引擎",
-                        value="本地 ComfyUI (默认)"
-                    )
-                    img_api_key_cn = gr.Textbox(
-                        label="API Key",
-                        placeholder="ComfyUI 无需 API Key",
-                        type="password"
+                        value=_saved_backend
                     )
 
-                    # ComfyUI 工作流设置
-                    gr.Markdown("**ComfyUI 工作流**", elem_classes="workflow-label")
-                    with gr.Row():
-                        load_default_workflow_btn = gr.Button(
-                            "📦 加载默认流",
-                            size="sm",
-                            variant="primary",
-                            scale=1
+                    # 苍何 API 配置区域 (可手动切换模型)
+                    _is_canghe = "苍何" in _saved_backend
+                    with gr.Group(visible=_is_canghe) as canghe_config_group:
+                        # 隐藏的输入框，保持兼容性
+                        canghe_api_key_input = gr.Textbox(
+                            label="",
+                            visible=False,
+                            value=get_saved_canghe_api_key()
                         )
-                        load_custom_workflow_btn = gr.Button(
-                            "📁 加载自定义",
-                            size="sm",
-                            variant="secondary",
-                            scale=1
+                        canghe_model_select = gr.Radio(
+                            ["Nano-Banana (默认)", "DALL-E 3"],
+                            label="图像生成模型",
+                            value=get_saved_canghe_model_v2(),
+                            interactive=True
                         )
-                    img_workflow_file = gr.File(
-                        label="上传工作流 (JSON)",
-                        file_types=[".json"],
-                        type="filepath",
-                        visible=False
-                    )
-                    workflow_status = gr.Textbox(
-                        label="",
-                        show_label=False,
-                        interactive=False,
-                        container=False,
-                        value="未加载工作流",
-                        elem_classes="workflow-status"
-                    )
+                        gr.HTML('''
+                        <div style="font-size:10px;color:#64748b;margin-top:4px;padding:4px 8px;background:rgba(100,116,139,0.1);border-radius:4px;">
+                            💡 Nano-Banana 默认 | DALL-E 3 备用（稳定）
+                        </div>
+                        ''')
+                        with gr.Row():
+                            apply_img_model_btn = gr.Button("✅ 应用", size="sm", variant="primary", scale=1)
+                            img_model_status = gr.Textbox(
+                                label="",
+                                show_label=False,
+                                interactive=False,
+                                container=False,
+                                scale=2,
+                                placeholder="选择后点击应用"
+                            )
 
+                    # ComfyUI 配置区域
+                    with gr.Group(visible=not _is_canghe) as comfyui_config_group:
+                        gr.Markdown("**ComfyUI 工作流**", elem_classes="workflow-label")
+                        with gr.Row():
+                            load_default_workflow_btn = gr.Button(
+                                "📦 加载默认流",
+                                size="sm",
+                                variant="primary",
+                                scale=1
+                            )
+                            load_custom_workflow_btn = gr.Button(
+                                "📁 加载自定义",
+                                size="sm",
+                                variant="secondary",
+                                scale=1
+                            )
+                        img_workflow_file = gr.File(
+                            label="上传工作流 (JSON)",
+                            file_types=[".json"],
+                            type="filepath",
+                            visible=False
+                        )
+                        workflow_status = gr.Textbox(
+                            label="",
+                            show_label=False,
+                            interactive=False,
+                            container=False,
+                            value="未加载工作流",
+                            elem_classes="workflow-status"
+                        )
+
+                    # 隐藏字段 (兼容)
+                    img_api_key_cn = gr.Textbox(visible=False, value="")
                     img_api_url_cn = gr.Textbox(visible=False, value="")
                     img_provider_intl = gr.Textbox(visible=False, value="")
                     img_api_key_intl = gr.Textbox(visible=False, value="")
@@ -5905,27 +9134,34 @@ def create_ui():
 
                 # 视频生成配置 - 简化版
                 with gr.Accordion("🎬 视频生成", open=False):
+                    gr.HTML("""
+                    <div style="padding: 8px 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(139, 92, 246, 0.2);">
+                        <span style="color: #a78bfa; font-size: 12px;">💡 苍何视频 (VEO/即梦) 配置请在顶部「🌊 苍何 API 配置」中设置</span>
+                    </div>
+                    """)
                     video_provider_cn = gr.Radio(
-                        ["本地 ComfyUI (默认)", "智谱 CogVideoX", "可灵 AI", "Runway"],
+                        ["苍何 API (推荐)", "本地 ComfyUI"],
                         label="选择引擎",
-                        value="本地 ComfyUI (默认)"
+                        value="苍何 API (推荐)"
                     )
                     video_api_key_cn = gr.Textbox(
                         label="API Key",
-                        placeholder="ComfyUI 无需 API Key",
-                        type="password"
+                        placeholder="苍何 API 已在顶部配置",
+                        type="password",
+                        visible=False
                     )
                     video_workflow_file = gr.File(
                         label="ComfyUI 工作流 (JSON)",
                         file_types=[".json"],
-                        type="filepath"
+                        type="filepath",
+                        visible=False
                     )
                     video_api_url_cn = gr.Textbox(visible=False, value="")
                     video_provider_intl = gr.Textbox(visible=False, value="")
                     video_api_key_intl = gr.Textbox(visible=False, value="")
                     video_api_url_intl = gr.Textbox(visible=False, value="")
-                    video_save_btn = gr.Button("保存配置", elem_classes="primary-btn", size="sm")
-                    video_save_status = gr.Textbox(label="", show_label=False, interactive=False, container=False)
+                    video_save_btn = gr.Button("保存配置", elem_classes="primary-btn", size="sm", visible=False)
+                    video_save_status = gr.Textbox(label="", show_label=False, interactive=False, container=False, visible=False)
 
                 # ===== CLI 实时反馈窗口 =====
                 gr.HTML("""
@@ -5941,15 +9177,17 @@ def create_ui():
                 </div>
                 """)
                 cli_output_display = gr.Textbox(
-                    value="",
-                    lines=4,
-                    max_lines=8,
+                    value="[系统] AI Storyboard Pro v2.2 已启动\n[系统] CLI 实时监控已就绪，等待 API 调用...",
+                    lines=6,
+                    max_lines=12,
                     interactive=False,
                     show_label=False,
                     container=False,
                     elem_classes="cli-terminal-content",
-                    visible=False
+                    visible=True
                 )
+                # CLI 日志定时刷新 (每 2 秒)
+                cli_timer = gr.Timer(value=2, active=True)
                 with gr.Row():
                     refresh_cli_btn = gr.Button("🔄 刷新", size="sm", scale=1, variant="secondary")
                     clear_cli_btn = gr.Button("🗑️ 清空", size="sm", scale=1, variant="secondary")
@@ -5957,13 +9195,128 @@ def create_ui():
         # ===== 工作流进度指示器样式 =====
         gr.HTML("""
         <style>
+            /* ===== 主布局：使用 CSS Grid 实现左右分栏 ===== */
+            .main-layout-row {
+                display: grid !important;
+                grid-template-columns: 1fr 300px !important;
+                gap: 20px !important;
+                align-items: start !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+            }
+
+            /* 左侧主工作区 */
+            .main-left-column {
+                grid-column: 1 !important;
+                min-width: 0 !important;
+                overflow-x: hidden !important;
+                max-width: 100% !important;
+            }
+
+            /* 右侧设置面板 - 固定宽度，粘性定位 */
+            .main-right-column {
+                grid-column: 2 !important;
+                width: 300px !important;
+                position: sticky !important;
+                top: 20px !important;
+                max-height: calc(100vh - 40px) !important;
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                background: var(--card-dark, #1e2936) !important;
+                border: 1px solid var(--border-dark, #233648) !important;
+                border-radius: 12px !important;
+                padding: 16px !important;
+            }
+
+            /* 隐藏 Gradio 默认的水平滚动条 */
+            .gradio-container,
+            .gradio-container .main,
+            .gradio-container .wrap {
+                overflow-x: hidden !important;
+                max-width: 100% !important;
+            }
+
+            /* 确保 Gradio 的 Row 组件不产生额外滚动 */
+            .main-layout-row > div {
+                min-width: 0 !important;
+            }
+
+            /* ===== 标签页内容宽度限制 ===== */
+            .tabs,
+            .tabitem,
+            .tab-content,
+            #tab-generate,
+            #tab-export,
+            #tab-create,
+            #tab-arrange {
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+                box-sizing: border-box !important;
+            }
+
+            /* 镜头卡片容器 - 确保不超出 */
+            .shot-cards-panel,
+            .video-cards-panel,
+            .shot-cards-container,
+            .video-cards-container {
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+                box-sizing: border-box !important;
+            }
+
+            /* 所有 Row 和 Column 不超出父容器 */
+            .main-left-column .row,
+            .main-left-column .column,
+            .main-left-column > div {
+                max-width: 100% !important;
+                min-width: 0 !important;
+                box-sizing: border-box !important;
+            }
+
+            /* ===== 生成标签页特殊修复 ===== */
+            #tab-generate .shot-cards-container,
+            #tab-generate .video-cards-container {
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+
+            #tab-generate .generate-control-bar,
+            #tab-generate .image-history-bar,
+            #tab-generate .video-generate-bar {
+                width: 100% !important;
+                max-width: 100% !important;
+                flex-wrap: wrap !important;
+            }
+
+            /* ===== 导出标签页特殊修复 ===== */
+            #tab-export > div,
+            #tab-export .block {
+                max-width: 100% !important;
+            }
+
+            /* 确保表格不溢出 */
+            .main-left-column table {
+                max-width: 100% !important;
+                table-layout: fixed !important;
+                word-wrap: break-word !important;
+            }
+
+            /* 隐藏滚动条 */
+            .main-left-column::-webkit-scrollbar,
+            .tabs::-webkit-scrollbar {
+                width: 0 !important;
+                height: 0 !important;
+            }
+
+
             /* ===== 工作流进度指示器 (紧凑版) ===== */
             .workflow-progress {
                 background: var(--card-dark);
                 border: 1px solid var(--border-dark);
                 border-radius: 8px;
                 padding: 8px 12px;
-                margin-bottom: 12px;
+                margin-bottom: 0;
             }
             .workflow-progress-header {
                 display: flex;
@@ -6068,6 +9421,105 @@ def create_ui():
             }
             .workflow-step.completed .step-info h4 {
                 color: #22c55e;
+            }
+
+            /* ===== API 调用监控面板 ===== */
+            .api-monitor-panel {
+                background: linear-gradient(135deg, rgba(16, 25, 34, 0.95) 0%, rgba(26, 35, 44, 0.98) 100%);
+                border: 1px solid var(--border-dark);
+                border-radius: 10px;
+                padding: 12px;
+                margin-bottom: 12px;
+            }
+            .api-monitor-header {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 10px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid var(--border-dark);
+            }
+            .api-status-indicator {
+                font-size: 14px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .api-status-indicator.calling {
+                animation: pulse-glow 1s ease-in-out infinite;
+            }
+            @keyframes pulse-glow {
+                0%, 100% {
+                    opacity: 1;
+                    filter: drop-shadow(0 0 4px #3b82f6);
+                }
+                50% {
+                    opacity: 0.5;
+                    filter: drop-shadow(0 0 8px #3b82f6);
+                }
+            }
+            .api-status-text {
+                font-size: 12px;
+                color: var(--text-secondary);
+                font-weight: 500;
+            }
+            .api-status-indicator.calling + .api-status-text {
+                color: #3b82f6;
+                font-weight: 600;
+            }
+            .api-stats {
+                display: flex;
+                gap: 8px;
+                margin-bottom: 10px;
+            }
+            .api-stats .stat-item {
+                flex: 1;
+                background: var(--surface-dark);
+                padding: 8px;
+                border-radius: 6px;
+                text-align: center;
+            }
+            .api-stats .stat-label {
+                display: block;
+                font-size: 10px;
+                color: var(--text-secondary);
+                margin-bottom: 2px;
+            }
+            .api-stats .stat-value {
+                display: block;
+                font-size: 14px;
+                font-weight: 700;
+                color: white;
+            }
+            .api-stats .stat-value.tokens {
+                color: #22c55e;
+            }
+            .api-log-container {
+                background: var(--surface-dark);
+                border-radius: 6px;
+                padding: 8px;
+                max-height: 120px;
+                overflow-y: auto;
+            }
+            .api-log-title {
+                font-size: 11px;
+                color: var(--text-secondary);
+                margin-bottom: 6px;
+                font-weight: 600;
+            }
+            .api-log-item {
+                font-size: 10px;
+                color: #9ca3af;
+                padding: 3px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.05);
+                font-family: 'Monaco', 'Menlo', monospace;
+            }
+            .api-log-item:last-child {
+                border-bottom: none;
+            }
+            .api-log-item.empty {
+                color: #6b7280;
+                font-style: italic;
             }
 
             /* ===== ComfyUI 连接状态 ===== */
@@ -6411,9 +9863,6 @@ def create_ui():
             analyzed_json = gr.Textbox()
             smart_apply_btn = gr.Button("应用导入")
 
-        # ===== 工作流进度指示器 =====
-        workflow_step_indicator = gr.HTML(value=get_workflow_indicator(0), elem_classes="workflow-indicator")
-
         with gr.Tabs() as main_tabs:
 
             # ===== 步骤1: 创建 =====
@@ -6675,6 +10124,41 @@ def create_ui():
                 # 视频镜头预览卡片（样式与图片镜头一致）
                 video_cards_html = gr.HTML(value=get_video_cards_html(), elem_classes="video-cards-panel")
 
+                # 镜头选择区域
+                with gr.Accordion("📋 选择镜头生成", open=True):
+                    with gr.Row():
+                        video_shot_checkboxes = gr.CheckboxGroup(
+                            choices=get_video_shot_choices(),
+                            label="选择要生成视频的镜头（⏳待生成 🎬已生成）",
+                            value=[],
+                            interactive=True
+                        )
+                    with gr.Row():
+                        select_all_video_btn = gr.Button("全选", elem_classes="secondary-btn", size="sm", scale=0, min_width=60)
+                        select_pending_video_btn = gr.Button("选待生成", elem_classes="secondary-btn", size="sm", scale=0, min_width=80)
+                        clear_video_selection_btn = gr.Button("清空", elem_classes="secondary-btn", size="sm", scale=0, min_width=60)
+                        generate_selected_video_btn = gr.Button("▶ 生成选中", elem_classes="primary-btn", size="sm", scale=1, min_width=100)
+                    with gr.Row():
+                        video_gen_mode_quick = gr.Radio(
+                            ["图生视频", "文生视频"],
+                            label="生成模式",
+                            value="图生视频",
+                            scale=1
+                        )
+                        video_style_quick = gr.Dropdown(
+                            ["电影感", "动漫风", "写实风", "赛博朋克"],
+                            label="风格",
+                            value="电影感",
+                            scale=1
+                        )
+                        video_camera_quick = gr.Dropdown(
+                            ["静止", "缓慢推进", "缓慢拉远", "左右平移", "跟随主体"],
+                            label="运镜",
+                            value="静止",
+                            scale=1
+                        )
+                    selected_video_status = gr.Textbox(label="", show_label=False, interactive=False, container=False, placeholder="选择镜头后点击生成")
+
                 # 按钮行
                 with gr.Row(elem_classes="video-generate-bar"):
                     batch_video_btn = gr.Button(
@@ -6847,7 +10331,7 @@ def create_ui():
                 gr.Markdown("选择导出格式，下载您的分镜作品")
 
                 export_format = gr.Radio(
-                    ["图片包 (ZIP)", "项目文件 (JSON)", "分镜脚本 (TXT)", "完整备份 (ZIP+JSON+图片)"],
+                    ["图片包 (ZIP)", "项目文件 (JSON)", "分镜脚本 (TXT)", "完整备份 (ZIP+JSON+图片)", "一键完整备份 (视频+脚本+图片)", "网页剧本 (HTML+ZIP)"],
                     label="导出格式",
                     value="图片包 (ZIP)"
                 )
@@ -6878,18 +10362,1180 @@ def create_ui():
                 | 项目文件 (JSON) | 完整项目数据，不含图片 | 项目备份或迁移 |
                 | 分镜脚本 (TXT) | 文字版分镜脚本 | 打印或文档存档 |
                 | 完整备份 | 项目+图片+参考图 | 完整归档保存 |
+                | 一键完整备份 | 视频+脚本+图片全部打包 | 完整项目归档 |
+                | 网页剧本 | HTML网页格式，离线可查看 | 分享给团队成员查看 |
                 """)
+
+            # ===== AI 创作 =====
+            with gr.Tab("🔧 高级:AI创作", elem_id="tab-ai-creative", visible=False):
+
+                gr.Markdown("### AI 自动创作")
+                gr.Markdown("根据剧情自动创建角色、场景、物品，并使用 ComfyUI 生成图像")
+
+                # ComfyUI 设置
+                with gr.Accordion("ComfyUI 设置", open=False):
+                    with gr.Row():
+                        comfyui_host = gr.Textbox(
+                            label="ComfyUI 地址",
+                            value="127.0.0.1",
+                            placeholder="127.0.0.1"
+                        )
+                        comfyui_port = gr.Number(
+                            label="端口",
+                            value=8188,
+                            precision=0
+                        )
+                        comfyui_test_btn = gr.Button("测试连接", elem_classes="secondary-btn")
+                    comfyui_status = gr.Textbox(label="连接状态", interactive=False)
+
+                    with gr.Row():
+                        workflow_file = gr.File(
+                            label="自定义工作流 (可选)",
+                            file_types=[".json"]
+                        )
+                        load_workflow_btn = gr.Button("加载工作流", elem_classes="secondary-btn")
+                    workflow_status = gr.Textbox(label="工作流状态", interactive=False)
+
+                gr.Markdown("---")
+
+                # 剧情分析
+                gr.Markdown("### 剧情分析")
+                story_input = gr.Textbox(
+                    label="剧情文本",
+                    placeholder="粘贴或输入剧情/脚本文本...\n\n系统将自动分析并提取角色、场景、道具信息",
+                    lines=8
+                )
+
+                with gr.Row():
+                    analyze_story_btn = gr.Button("AI 分析剧情", elem_classes="primary-btn")
+                    auto_create_all_btn = gr.Button("全自动创作", elem_classes="success-btn")
+
+                analyze_status = gr.Textbox(label="分析状态", interactive=False)
+
+                # 分析结果预览
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("**提取的角色**")
+                        extracted_characters = gr.JSON(label="")
+                    with gr.Column():
+                        gr.Markdown("**提取的场景**")
+                        extracted_scenes = gr.JSON(label="")
+                    with gr.Column():
+                        gr.Markdown("**提取的道具**")
+                        extracted_props = gr.JSON(label="")
+
+                gr.Markdown("---")
+
+                # 子标签页
+                with gr.Tabs() as ai_sub_tabs:
+
+                    # 角色创建
+                    with gr.Tab("👤 角色创建"):
+                        gr.Markdown("### 生成角色形象")
+
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                ai_char_select = gr.Dropdown(
+                                    choices=[],
+                                    label="选择角色",
+                                    interactive=True
+                                )
+                                ai_char_info = gr.Textbox(
+                                    label="角色信息",
+                                    lines=4,
+                                    interactive=False
+                                )
+                                ai_char_style = gr.Radio(
+                                    ["写实风格", "动漫风格", "漫画风格", "水彩风格"],
+                                    label="艺术风格",
+                                    value="写实风格"
+                                )
+                                ai_char_ref = gr.File(
+                                    label="参考图 (可选)",
+                                    file_types=["image"]
+                                )
+                                generate_char_prompt_btn = gr.Button("生成提示语", elem_classes="secondary-btn")
+                                ai_char_prompt = gr.Textbox(
+                                    label="中文提示语 (可编辑)",
+                                    lines=4,
+                                    placeholder="点击'生成提示语'自动生成..."
+                                )
+                                generate_char_image_btn = gr.Button("生成角色形象", elem_classes="primary-btn")
+
+                            with gr.Column(scale=1):
+                                ai_char_preview = gr.Image(label="生成预览", height=400)
+                                ai_char_review = gr.Textbox(label="质量评审", lines=3, interactive=False)
+                                with gr.Row():
+                                    adopt_char_btn = gr.Button("采用并保存", elem_classes="success-btn")
+                                    regenerate_char_btn = gr.Button("重新生成", elem_classes="warning-btn")
+
+                        ai_char_status = gr.Textbox(label="状态", interactive=False)
+
+                    # 场景创建
+                    with gr.Tab("🏞️ 场景创建"):
+                        gr.Markdown("### 生成场景图")
+
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                ai_scene_select = gr.Dropdown(
+                                    choices=[],
+                                    label="选择场景",
+                                    interactive=True
+                                )
+                                ai_scene_info = gr.Textbox(
+                                    label="场景信息",
+                                    lines=4,
+                                    interactive=False
+                                )
+                                ai_scene_style = gr.Radio(
+                                    ["写实风格", "动漫风格", "漫画风格", "水彩风格"],
+                                    label="艺术风格",
+                                    value="写实风格"
+                                )
+                                ai_scene_ref = gr.File(
+                                    label="参考图 (可选)",
+                                    file_types=["image"]
+                                )
+                                generate_scene_prompt_btn = gr.Button("生成提示语", elem_classes="secondary-btn")
+                                ai_scene_prompt = gr.Textbox(
+                                    label="中文提示语 (可编辑)",
+                                    lines=4,
+                                    placeholder="点击'生成提示语'自动生成..."
+                                )
+                                generate_scene_image_btn = gr.Button("生成场景图", elem_classes="primary-btn")
+
+                            with gr.Column(scale=1):
+                                ai_scene_preview = gr.Image(label="生成预览", height=400)
+                                ai_scene_review = gr.Textbox(label="质量评审", lines=3, interactive=False)
+                                with gr.Row():
+                                    adopt_scene_btn = gr.Button("采用并保存", elem_classes="success-btn")
+                                    regenerate_scene_btn = gr.Button("重新生成", elem_classes="warning-btn")
+
+                        ai_scene_status = gr.Textbox(label="状态", interactive=False)
+
+                    # 道具创建
+                    with gr.Tab("📦 道具创建"):
+                        gr.Markdown("### 生成道具图")
+
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                ai_prop_select = gr.Dropdown(
+                                    choices=[],
+                                    label="选择道具",
+                                    interactive=True
+                                )
+                                ai_prop_info = gr.Textbox(
+                                    label="道具信息",
+                                    lines=4,
+                                    interactive=False
+                                )
+                                ai_prop_style = gr.Radio(
+                                    ["写实风格", "动漫风格", "漫画风格", "水彩风格"],
+                                    label="艺术风格",
+                                    value="写实风格"
+                                )
+                                generate_prop_prompt_btn = gr.Button("生成提示语", elem_classes="secondary-btn")
+                                ai_prop_prompt = gr.Textbox(
+                                    label="中文提示语 (可编辑)",
+                                    lines=4,
+                                    placeholder="点击'生成提示语'自动生成..."
+                                )
+                                generate_prop_image_btn = gr.Button("生成道具图", elem_classes="primary-btn")
+
+                            with gr.Column(scale=1):
+                                ai_prop_preview = gr.Image(label="生成预览", height=400)
+                                ai_prop_review = gr.Textbox(label="质量评审", lines=3, interactive=False)
+                                with gr.Row():
+                                    adopt_prop_btn = gr.Button("采用并保存", elem_classes="success-btn")
+                                    regenerate_prop_btn = gr.Button("重新生成", elem_classes="warning-btn")
+
+                        ai_prop_status = gr.Textbox(label="状态", interactive=False)
+
+                    # 批量生成
+                    with gr.Tab("⚡ 批量生成"):
+                        gr.Markdown("### 批量自动生成")
+                        gr.Markdown("选择要批量生成的项目，系统将自动完成：分析 → 提示语生成 → 图像生成 → 质量审核")
+
+                        with gr.Row():
+                            batch_chars = gr.CheckboxGroup(
+                                choices=[],
+                                label="选择角色"
+                            )
+                            batch_scenes = gr.CheckboxGroup(
+                                choices=[],
+                                label="选择场景"
+                            )
+                            batch_props = gr.CheckboxGroup(
+                                choices=[],
+                                label="选择道具"
+                            )
+
+                        batch_style = gr.Radio(
+                            ["写实风格", "动漫风格", "漫画风格", "水彩风格"],
+                            label="统一艺术风格",
+                            value="写实风格"
+                        )
+
+                        with gr.Row():
+                            batch_generate_btn = gr.Button("开始批量生成", elem_classes="primary-btn")
+                            batch_stop_btn = gr.Button("停止", elem_classes="warning-btn")
+
+                        batch_progress = gr.Textbox(label="进度", interactive=False)
+
+                        gr.Markdown("**生成结果**")
+                        batch_gallery = gr.Gallery(label="", show_label=False, columns=4, height=300)
+
+                    # 剧本转分镜手册
+                    with gr.Tab("📖 剧本转分镜"):
+                        gr.Markdown("### 小说/剧本 → 视频制作操作手册")
+                        gr.Markdown("""
+                        根据小说或剧本文本，自动生成完整的视频制作操作手册，包含：
+                        - 📝 剧情总览与结构分析
+                        - 👤 角色设定卡（外貌、服装、表演指导）
+                        - 🏞️ 场景设定（环境、光影、声音设计）
+                        - 📦 道具清单
+                        - 🎬 **完整分镜脚本**（每镜头500字+详细描述）
+                        - ✂️ **切镜逻辑分析**（转场、轴线、节奏、匹配）
+                        - 🎞️ 剪辑节奏设计
+                        - ✅ 制作检查清单
+                        """)
+
+                        with gr.Row():
+                            with gr.Column(scale=2):
+                                manual_story_input = gr.Textbox(
+                                    label="剧本/小说内容",
+                                    placeholder="粘贴或输入您的小说、剧本、故事大纲...\n\n支持任意长度文本，系统会自动截取处理",
+                                    lines=15
+                                )
+
+                                with gr.Row():
+                                    manual_story_file = gr.File(
+                                        label="或上传文件 (TXT/DOCX)",
+                                        file_types=[".txt", ".docx"]
+                                    )
+                                    load_story_btn = gr.Button("加载文件", elem_classes="secondary-btn")
+
+                            with gr.Column(scale=1):
+                                gr.Markdown("#### 制作参数")
+                                manual_style = gr.Radio(
+                                    ["电影感", "动漫风", "漫画风", "写实风", "水彩画", "赛博朋克", "复古怀旧"],
+                                    label="视觉风格",
+                                    value="电影感"
+                                )
+                                manual_aspect = gr.Radio(
+                                    ["16:9 横屏", "9:16 竖屏", "1:1 方形", "2.35:1 宽银幕"],
+                                    label="画面比例",
+                                    value="16:9 横屏"
+                                )
+                                manual_detail_level = gr.Radio(
+                                    ["标准 (每镜头300字)", "详细 (每镜头500字)", "极详细 (每镜头800字)"],
+                                    label="详细程度",
+                                    value="详细 (每镜头500字)"
+                                )
+
+                        with gr.Row():
+                            generate_manual_btn = gr.Button(
+                                "🚀 生成视频制作手册",
+                                elem_classes="primary-btn",
+                                size="lg"
+                            )
+                            export_manual_btn = gr.Button(
+                                "📥 导出手册",
+                                elem_classes="secondary-btn",
+                                size="lg"
+                            )
+
+                        manual_status = gr.Textbox(label="生成状态", interactive=False)
+
+                        gr.Markdown("---")
+                        gr.Markdown("### 📖 生成的视频制作操作手册")
+
+                        manual_output = gr.Markdown(
+                            value="*等待生成...*",
+                            elem_id="manual-output"
+                        )
+
+                        # 深色主题样式
+                        gr.HTML("""
+                        <style>
+                        #manual-output {
+                            background: #1a1a1a !important;
+                            padding: 24px !important;
+                            border-radius: 8px !important;
+                            max-height: 800px !important;
+                            overflow-y: auto !important;
+                        }
+                        #manual-output h1, #manual-output h2, #manual-output h3 {
+                            color: #e8e8e8 !important;
+                            border-bottom: 1px solid #333 !important;
+                            padding-bottom: 8px !important;
+                        }
+                        #manual-output h1 { color: #4ecdc4 !important; }
+                        #manual-output h2 { color: #45b7d1 !important; }
+                        #manual-output h3 { color: #f9ca24 !important; }
+                        #manual-output p, #manual-output li {
+                            color: #d0d0d0 !important;
+                            line-height: 1.8 !important;
+                        }
+                        #manual-output strong {
+                            color: #ff6b6b !important;
+                        }
+                        #manual-output table {
+                            border-collapse: collapse !important;
+                            width: 100% !important;
+                            margin: 16px 0 !important;
+                        }
+                        #manual-output th, #manual-output td {
+                            border: 1px solid #333 !important;
+                            padding: 8px 12px !important;
+                            color: #ccc !important;
+                        }
+                        #manual-output th {
+                            background: #2a2a2a !important;
+                            color: #4ecdc4 !important;
+                        }
+                        #manual-output code {
+                            background: #2a2a2a !important;
+                            color: #a29bfe !important;
+                            padding: 2px 6px !important;
+                            border-radius: 4px !important;
+                        }
+                        #manual-output hr {
+                            border-color: #333 !important;
+                            margin: 24px 0 !important;
+                        }
+                        #manual-output blockquote {
+                            border-left: 4px solid #4ecdc4 !important;
+                            padding-left: 16px !important;
+                            color: #aaa !important;
+                            margin: 16px 0 !important;
+                        }
+                        </style>
+                        """)
+
+            # ========================================
+            # 视频拆解标签页
+            # ========================================
+            with gr.Tab("🔧 高级:视频拆解", elem_id="tab-video-analysis", visible=False):
+                gr.Markdown("### 视频内容拆解分析")
+                gr.Markdown("上传视频文件，系统将自动抽帧、OCR识别、AI分析，生成完整的视频拆解报告")
+
+                with gr.Row():
+                    # 左侧设置
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### 服务连接设置")
+                        with gr.Row():
+                            ollama_host = gr.Textbox(
+                                label="Ollama 地址",
+                                value="localhost",
+                                scale=2
+                            )
+                            ollama_port = gr.Number(
+                                label="端口",
+                                value=11434,
+                                scale=1
+                            )
+                        test_va_connections_btn = gr.Button("测试连接", elem_classes="secondary-btn")
+                        va_connection_status = gr.Textbox(label="连接状态", interactive=False)
+
+                        gr.Markdown("#### 视频上传")
+                        video_input = gr.File(
+                            label="上传视频文件",
+                            file_types=["video"],
+                            type="filepath"
+                        )
+                        video_info_display = gr.Textbox(label="视频信息", interactive=False)
+
+                        gr.Markdown("#### 抽帧设置")
+                        extraction_mode = gr.Radio(
+                            ["interval", "scene_change", "both"],
+                            label="抽帧模式",
+                            value="interval",
+                            info="interval=固定间隔, scene_change=场景切换, both=两者结合"
+                        )
+                        interval_seconds = gr.Slider(
+                            minimum=0.1,
+                            maximum=30.0,
+                            value=5.0,
+                            step=0.1,
+                            label="抽帧间隔 (秒)",
+                            info="仅在 interval/both 模式下有效，最小0.1秒"
+                        )
+                        max_frames = gr.Slider(
+                            minimum=10,
+                            maximum=200,
+                            value=50,
+                            step=10,
+                            label="最大帧数"
+                        )
+
+                        with gr.Row():
+                            start_analysis_btn = gr.Button("开始分析", elem_classes="primary-btn")
+                            stop_analysis_btn = gr.Button("停止", elem_classes="warning-btn")
+
+                        analysis_progress = gr.Textbox(label="分析进度", interactive=False)
+
+                        # 清理管理区域
+                        with gr.Accordion("🗑️ 历史数据清理", open=False):
+                            gr.Markdown("每次分析创建独立目录，可清理超过1天的旧数据")
+                            with gr.Row():
+                                check_cleanup_btn = gr.Button("查看可清理内容", elem_classes="secondary-btn")
+                                confirm_cleanup_btn = gr.Button("确认清理", elem_classes="warning-btn")
+                            cleanup_info_display = gr.Textbox(
+                                label="清理信息",
+                                lines=6,
+                                interactive=False,
+                                placeholder="点击「查看可清理内容」查看历史数据..."
+                            )
+                            cleanup_status = gr.Textbox(label="清理状态", interactive=False)
+
+                    # 右侧结果
+                    with gr.Column(scale=2):
+                        with gr.Tabs() as va_result_tabs:
+                            # 概览
+                            with gr.Tab("📊 概览"):
+                                story_summary_display = gr.Textbox(
+                                    label="故事概要",
+                                    lines=4,
+                                    interactive=True
+                                )
+                                story_structure_display = gr.Textbox(
+                                    label="故事结构",
+                                    lines=4,
+                                    interactive=True
+                                )
+                                save_overview_btn = gr.Button("保存修改", elem_classes="secondary-btn")
+
+                            # 分镜脚本 (新增)
+                            with gr.Tab("📝 分镜脚本"):
+                                gr.Markdown("#### 专业分镜脚本 (中文)")
+                                storyboard_display = gr.Textbox(
+                                    label="分镜脚本",
+                                    lines=15,
+                                    max_lines=30,
+                                    interactive=True,
+                                    placeholder="0.1～2秒: 中景, 平视, 温馨客厅内深色木家具，白发老人坐在沙发上微笑。[cut]\n2～4秒: 特写, 平视, 老人的手搭在青年肩上。[cut]"
+                                )
+                                save_storyboard_btn = gr.Button("保存分镜脚本", elem_classes="secondary-btn")
+
+                            # 角色分析
+                            with gr.Tab("👤 角色分析"):
+                                va_characters_list = gr.Dataframe(
+                                    headers=["ID", "名称", "类型", "首次出现", "外貌描述"],
+                                    datatype=["str", "str", "str", "str", "str"],
+                                    interactive=True,
+                                    label="角色列表"
+                                )
+                                va_char_edit_id = gr.Textbox(label="编辑角色ID", visible=False)
+                                save_char_btn = gr.Button("保存角色修改", elem_classes="secondary-btn")
+
+                            # 场景分析
+                            with gr.Tab("🏞️ 场景分析"):
+                                va_scenes_list = gr.Dataframe(
+                                    headers=["ID", "场景名", "开始", "结束", "氛围", "光线"],
+                                    datatype=["str", "str", "str", "str", "str", "str"],
+                                    interactive=True,
+                                    label="场景列表"
+                                )
+                                save_scene_btn = gr.Button("保存场景修改", elem_classes="secondary-btn")
+
+                            # 分镜分析
+                            with gr.Tab("🎥 分镜分析"):
+                                va_shots_list = gr.Dataframe(
+                                    headers=["ID", "时间", "镜头类型", "角度", "运动", "目的"],
+                                    datatype=["str", "str", "str", "str", "str", "str"],
+                                    interactive=True,
+                                    label="分镜列表"
+                                )
+                                save_shot_btn = gr.Button("保存分镜修改", elem_classes="secondary-btn")
+
+                            # 故事节点/爽点
+                            with gr.Tab("⭐ 故事节点"):
+                                va_story_points_list = gr.Dataframe(
+                                    headers=["ID", "时间", "标题", "类型", "情感冲击"],
+                                    datatype=["str", "str", "str", "str", "str"],
+                                    interactive=True,
+                                    label="故事节点/爽点"
+                                )
+                                save_story_point_btn = gr.Button("保存节点修改", elem_classes="secondary-btn")
+
+                            # 时间轴
+                            with gr.Tab("⏱️ 时间轴"):
+                                gr.Markdown("#### 关键帧时间轴")
+                                timeline_slider = gr.Slider(
+                                    minimum=0,
+                                    maximum=100,
+                                    value=0,
+                                    step=1,
+                                    label="时间位置 (秒)"
+                                )
+                                with gr.Row():
+                                    timeline_frame_preview = gr.Image(label="当前帧", height=300)
+                                    with gr.Column():
+                                        timeline_frame_info = gr.Textbox(
+                                            label="帧信息",
+                                            lines=6,
+                                            interactive=False
+                                        )
+                                        timeline_frame_tags = gr.Textbox(
+                                            label="标签",
+                                            lines=2,
+                                            interactive=True
+                                        )
+                                        timeline_frame_ocr = gr.Textbox(
+                                            label="OCR文字",
+                                            lines=3,
+                                            interactive=True
+                                        )
+
+                                frames_gallery = gr.Gallery(
+                                    label="提取的帧",
+                                    columns=6,
+                                    height=200
+                                )
+
+                        # 导出区域
+                        gr.Markdown("#### 导出报告")
+                        with gr.Row():
+                            export_pdf_btn = gr.Button("导出PDF报告", elem_classes="primary-btn")
+                            export_json_btn = gr.Button("保存分析结果", elem_classes="secondary-btn")
+                            load_result_file = gr.File(label="加载历史结果", file_types=[".json"])
+                            load_result_btn = gr.Button("加载", elem_classes="secondary-btn")
+
+                        export_status = gr.Textbox(label="导出状态", interactive=False)
+                        export_file_output = gr.File(label="下载文件")
+
+            # ========================================
+            # 专业视频编辑风格时间线 (NLE Style)
+            # ========================================
+            with gr.Tab("🔧 高级:时间线", elem_id="tab-timeline-viz", visible=False):
+                # 专业 NLE 风格 CSS
+                gr.HTML("""
+                <style>
+                    /* ===== NLE 时间线主容器 ===== */
+                    .nle-container {
+                        background: #1a1a1a;
+                        border-radius: 8px;
+                        overflow: hidden;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    }
+
+                    /* ===== 顶部工具栏 ===== */
+                    .nle-toolbar {
+                        background: linear-gradient(180deg, #2d2d2d 0%, #252525 100%);
+                        padding: 8px 16px;
+                        display: flex;
+                        align-items: center;
+                        gap: 16px;
+                        border-bottom: 1px solid #3a3a3a;
+                    }
+                    .nle-toolbar-group {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .nle-btn {
+                        background: #3a3a3a;
+                        border: 1px solid #4a4a4a;
+                        color: #ccc;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                    }
+                    .nle-btn:hover {
+                        background: #4a4a4a;
+                        color: #fff;
+                    }
+                    .nle-btn-primary {
+                        background: linear-gradient(180deg, #0066cc 0%, #0055aa 100%);
+                        border-color: #0077ee;
+                        color: #fff;
+                    }
+                    .nle-timecode {
+                        background: #000;
+                        color: #00ff00;
+                        font-family: 'Courier New', monospace;
+                        font-size: 14px;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        letter-spacing: 1px;
+                        min-width: 100px;
+                        text-align: center;
+                    }
+                    .nle-transport {
+                        display: flex;
+                        gap: 4px;
+                    }
+                    .nle-transport-btn {
+                        background: #2a2a2a;
+                        border: 1px solid #3a3a3a;
+                        color: #aaa;
+                        width: 32px;
+                        height: 28px;
+                        border-radius: 3px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                    }
+                    .nle-transport-btn:hover {
+                        background: #3a3a3a;
+                        color: #fff;
+                    }
+                    .nle-transport-btn.active {
+                        background: #0066cc;
+                        color: #fff;
+                    }
+
+                    /* ===== 时间线区域 ===== */
+                    .nle-timeline-wrapper {
+                        display: flex;
+                        flex-direction: column;
+                        background: #1e1e1e;
+                    }
+
+                    /* ===== 时间标尺 ===== */
+                    .nle-ruler {
+                        background: linear-gradient(180deg, #2a2a2a 0%, #222 100%);
+                        height: 32px;
+                        display: flex;
+                        border-bottom: 1px solid #3a3a3a;
+                        position: relative;
+                    }
+                    .nle-ruler-header {
+                        width: 180px;
+                        min-width: 180px;
+                        background: #252525;
+                        border-right: 1px solid #3a3a3a;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: #888;
+                        font-size: 11px;
+                    }
+                    .nle-ruler-content {
+                        flex: 1;
+                        position: relative;
+                        overflow: hidden;
+                    }
+                    .nle-ruler-marks {
+                        display: flex;
+                        height: 100%;
+                        color: #888;
+                        font-size: 10px;
+                    }
+                    .nle-ruler-mark {
+                        flex: 1;
+                        border-left: 1px solid #3a3a3a;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: flex-end;
+                        padding: 2px 4px;
+                    }
+                    .nle-ruler-mark span {
+                        font-family: 'Courier New', monospace;
+                    }
+
+                    /* ===== 播放头 ===== */
+                    .nle-playhead {
+                        position: absolute;
+                        top: 0;
+                        width: 2px;
+                        background: #ff3333;
+                        z-index: 100;
+                        pointer-events: none;
+                    }
+                    .nle-playhead::before {
+                        content: '';
+                        position: absolute;
+                        top: 0;
+                        left: -6px;
+                        width: 0;
+                        height: 0;
+                        border-left: 7px solid transparent;
+                        border-right: 7px solid transparent;
+                        border-top: 10px solid #ff3333;
+                    }
+
+                    /* ===== 轨道区域 ===== */
+                    .nle-tracks {
+                        flex: 1;
+                        overflow-y: auto;
+                        max-height: 500px;
+                    }
+                    .nle-track {
+                        display: flex;
+                        border-bottom: 1px solid #2a2a2a;
+                        min-height: 60px;
+                    }
+                    .nle-track-header {
+                        width: 180px;
+                        min-width: 180px;
+                        background: #252525;
+                        border-right: 1px solid #3a3a3a;
+                        padding: 8px 12px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                    }
+                    .nle-track-name {
+                        color: #fff;
+                        font-size: 12px;
+                        font-weight: 600;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
+                    .nle-track-name .icon {
+                        font-size: 14px;
+                    }
+                    .nle-track-controls {
+                        display: flex;
+                        gap: 4px;
+                        margin-top: 6px;
+                    }
+                    .nle-track-ctrl-btn {
+                        width: 20px;
+                        height: 18px;
+                        background: #3a3a3a;
+                        border: none;
+                        border-radius: 2px;
+                        color: #888;
+                        font-size: 9px;
+                        cursor: pointer;
+                    }
+                    .nle-track-ctrl-btn:hover {
+                        background: #4a4a4a;
+                        color: #fff;
+                    }
+                    .nle-track-ctrl-btn.active {
+                        background: #ff6600;
+                        color: #fff;
+                    }
+
+                    /* ===== 轨道内容 (片段区域) ===== */
+                    .nle-track-content {
+                        flex: 1;
+                        position: relative;
+                        background: #1a1a1a;
+                        padding: 4px 0;
+                    }
+                    .nle-track-clips {
+                        display: flex;
+                        height: 100%;
+                        padding: 4px;
+                        gap: 2px;
+                    }
+
+                    /* ===== 片段 (Clips) ===== */
+                    .nle-clip {
+                        height: calc(100% - 8px);
+                        border-radius: 4px;
+                        padding: 4px 8px;
+                        font-size: 11px;
+                        color: #fff;
+                        overflow: hidden;
+                        white-space: nowrap;
+                        text-overflow: ellipsis;
+                        cursor: pointer;
+                        transition: all 0.2s;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+                        border: 1px solid rgba(255,255,255,0.1);
+                    }
+                    .nle-clip:hover {
+                        filter: brightness(1.2);
+                        transform: translateY(-1px);
+                    }
+                    .nle-clip-title {
+                        font-weight: 600;
+                        font-size: 11px;
+                    }
+                    .nle-clip-time {
+                        font-size: 9px;
+                        opacity: 0.7;
+                        margin-top: 2px;
+                    }
+
+                    /* 轨道颜色 */
+                    .nle-track-plot .nle-track-header { border-left: 3px solid #ff6b6b; }
+                    .nle-track-plot .nle-clip { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%); }
+                    .nle-track-character .nle-track-header { border-left: 3px solid #4ecdc4; }
+                    .nle-track-character .nle-clip { background: linear-gradient(135deg, #4ecdc4 0%, #3dbdb4 100%); }
+                    .nle-track-scene .nle-track-header { border-left: 3px solid #45b7d1; }
+                    .nle-track-scene .nle-clip { background: linear-gradient(135deg, #45b7d1 0%, #35a7c1 100%); }
+                    .nle-track-props .nle-track-header { border-left: 3px solid #f9ca24; }
+                    .nle-track-props .nle-clip { background: linear-gradient(135deg, #f9ca24 0%, #e9ba14 100%); color: #333; }
+                    .nle-track-shot .nle-track-header { border-left: 3px solid #a29bfe; }
+                    .nle-track-shot .nle-clip { background: linear-gradient(135deg, #a29bfe 0%, #928bee 100%); }
+
+                    /* ===== 关键词高亮 ===== */
+                    .kw-red { color: #ff6b6b; font-weight: 600; }
+                    .kw-green { color: #4ecdc4; font-weight: 600; }
+                    .kw-blue { color: #45b7d1; font-weight: 600; }
+                    .kw-yellow { color: #f9ca24; font-weight: 600; }
+                    .kw-purple { color: #a29bfe; font-weight: 600; }
+
+                    /* ===== 详情面板 ===== */
+                    .nle-detail-panel {
+                        background: #252525;
+                        border-top: 1px solid #3a3a3a;
+                        padding: 16px;
+                    }
+                    .nle-detail-title {
+                        color: #fff;
+                        font-size: 14px;
+                        font-weight: 600;
+                        margin-bottom: 12px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    }
+                    .nle-detail-content {
+                        color: #ccc;
+                        font-size: 13px;
+                        line-height: 1.6;
+                    }
+                    .nle-detail-tag {
+                        display: inline-block;
+                        background: #3a3a3a;
+                        color: #fff;
+                        padding: 2px 8px;
+                        border-radius: 3px;
+                        font-size: 11px;
+                        margin: 2px;
+                    }
+
+                    /* ===== 缩放控制 ===== */
+                    .nle-zoom-control {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        color: #888;
+                        font-size: 11px;
+                    }
+                    .nle-zoom-slider {
+                        width: 100px;
+                    }
+
+                    /* ===== 全屏模式 ===== */
+                    #nle-fullscreen:fullscreen {
+                        background: #1a1a1a;
+                    }
+                    #nle-fullscreen:fullscreen .nle-tracks {
+                        max-height: calc(100vh - 200px);
+                    }
+
+                    /* ===== 时间线标签页深色主题 ===== */
+                    #tab-timeline-viz {
+                        background: #0d0d0d !important;
+                    }
+                    #tab-timeline-viz .gradio-container {
+                        background: #0d0d0d !important;
+                    }
+                    #tab-timeline-viz .block {
+                        background: #1a1a1a !important;
+                        border-color: #2a2a2a !important;
+                    }
+                    #tab-timeline-viz .wrap {
+                        background: #1a1a1a !important;
+                    }
+
+                    /* 滑块深色 */
+                    #tab-timeline-viz input[type="range"] {
+                        background: #2a2a2a !important;
+                    }
+                    #tab-timeline-viz .slider-container,
+                    #tab-timeline-viz .range-slider {
+                        background: #1a1a1a !important;
+                    }
+
+                    /* 文本框深色 */
+                    #tab-timeline-viz input[type="text"],
+                    #tab-timeline-viz textarea,
+                    #tab-timeline-viz .textbox {
+                        background: #1a1a1a !important;
+                        border-color: #3a3a3a !important;
+                        color: #e0e0e0 !important;
+                    }
+                    #tab-timeline-viz .input-container,
+                    #tab-timeline-viz .text-input {
+                        background: #1a1a1a !important;
+                    }
+
+                    /* 标签深色 */
+                    #tab-timeline-viz label,
+                    #tab-timeline-viz .label-text,
+                    #tab-timeline-viz span.svelte-1gfkn6j {
+                        color: #b0b0b0 !important;
+                    }
+
+                    /* 按钮深色 */
+                    #tab-timeline-viz button {
+                        background: #2a2a2a !important;
+                        border-color: #3a3a3a !important;
+                        color: #e0e0e0 !important;
+                    }
+                    #tab-timeline-viz button:hover {
+                        background: #3a3a3a !important;
+                    }
+                    #tab-timeline-viz button.primary-btn,
+                    #tab-timeline-viz .primary-btn {
+                        background: linear-gradient(180deg, #0066cc 0%, #0055aa 100%) !important;
+                        border-color: #0077ee !important;
+                        color: #fff !important;
+                    }
+
+                    /* 图片容器深色 */
+                    #tab-timeline-viz .image-container,
+                    #tab-timeline-viz .image-frame {
+                        background: #1a1a1a !important;
+                        border-color: #2a2a2a !important;
+                    }
+
+                    /* Markdown 区域深色 */
+                    #tab-timeline-viz .markdown-body,
+                    #tab-timeline-viz .prose {
+                        background: #1a1a1a !important;
+                        color: #d0d0d0 !important;
+                    }
+                    #tab-timeline-viz .markdown-body h1,
+                    #tab-timeline-viz .markdown-body h2,
+                    #tab-timeline-viz .markdown-body h3 {
+                        color: #e8e8e8 !important;
+                    }
+
+                    /* 分隔线深色 */
+                    #tab-timeline-viz hr {
+                        border-color: #2a2a2a !important;
+                    }
+
+                    /* Row 和 Column 深色 */
+                    #tab-timeline-viz .gr-row,
+                    #tab-timeline-viz .gr-column,
+                    #tab-timeline-viz .row,
+                    #tab-timeline-viz .column {
+                        background: transparent !important;
+                    }
+
+                    /* 滑块轨道和滑块 */
+                    #tab-timeline-viz input[type="range"]::-webkit-slider-runnable-track {
+                        background: #3a3a3a !important;
+                    }
+                    #tab-timeline-viz input[type="range"]::-webkit-slider-thumb {
+                        background: #0066cc !important;
+                    }
+
+                    /* 下拉框深色 */
+                    #tab-timeline-viz select,
+                    #tab-timeline-viz .dropdown {
+                        background: #1a1a1a !important;
+                        border-color: #3a3a3a !important;
+                        color: #e0e0e0 !important;
+                    }
+
+                    /* 整体容器深色 */
+                    #nle-fullscreen {
+                        background: #0d0d0d !important;
+                        padding: 16px;
+                        border-radius: 8px;
+                    }
+
+                    /* Gradio 4.x 特定选择器 */
+                    #tab-timeline-viz .gradio-slider,
+                    #tab-timeline-viz .gradio-textbox,
+                    #tab-timeline-viz .gradio-image,
+                    #tab-timeline-viz .gradio-markdown,
+                    #tab-timeline-viz .gradio-button,
+                    #tab-timeline-viz .gradio-dropdown {
+                        background: #1a1a1a !important;
+                    }
+
+                    /* 输入框包装器 */
+                    #tab-timeline-viz .svelte-1f354aw,
+                    #tab-timeline-viz .svelte-1pie7s6 {
+                        background: #1a1a1a !important;
+                        border-color: #3a3a3a !important;
+                    }
+
+                    /* 面板和容器 */
+                    #tab-timeline-viz .panel,
+                    #tab-timeline-viz .container,
+                    #tab-timeline-viz .form {
+                        background: #1a1a1a !important;
+                    }
+
+                    /* 时间滑块特定样式 */
+                    #tl-time-slider {
+                        background: #1a1a1a !important;
+                    }
+                    #tl-time-slider input {
+                        background: #2a2a2a !important;
+                    }
+
+                    /* 图片上传区域 */
+                    #tab-timeline-viz .image-upload,
+                    #tab-timeline-viz .upload-container {
+                        background: #1a1a1a !important;
+                        border-color: #3a3a3a !important;
+                    }
+
+                    /* 标签页内容区域 */
+                    #tab-timeline-viz > .tabitem {
+                        background: #0d0d0d !important;
+                    }
+
+                    /* 滑块数字显示 */
+                    #tab-timeline-viz .slider-number,
+                    #tab-timeline-viz .number-input {
+                        background: #1a1a1a !important;
+                        color: #e0e0e0 !important;
+                        border-color: #3a3a3a !important;
+                    }
+                </style>
+                """)
+
+                with gr.Column(elem_id="nle-fullscreen"):
+                    # NLE 风格时间线
+                    nle_timeline_html = gr.HTML("""
+                    <div class="nle-container">
+                        <!-- 工具栏 -->
+                        <div class="nle-toolbar">
+                            <div class="nle-toolbar-group">
+                                <span style="color:#888;font-size:11px;">PROJECT</span>
+                                <span class="nle-timecode" id="nle-timecode">00:00:00:00</span>
+                            </div>
+                            <div class="nle-toolbar-group nle-transport">
+                                <button class="nle-transport-btn" title="跳到开始">⏮</button>
+                                <button class="nle-transport-btn" title="后退">⏪</button>
+                                <button class="nle-transport-btn active" title="播放/暂停">▶</button>
+                                <button class="nle-transport-btn" title="前进">⏩</button>
+                                <button class="nle-transport-btn" title="跳到结尾">⏭</button>
+                            </div>
+                            <div class="nle-toolbar-group nle-zoom-control">
+                                <span>缩放</span>
+                                <input type="range" class="nle-zoom-slider" min="1" max="10" value="5">
+                                <span>100%</span>
+                            </div>
+                            <div style="flex:1;"></div>
+                            <div class="nle-toolbar-group">
+                                <span style="color:#888;font-size:11px;">DURATION</span>
+                                <span class="nle-timecode">00:00:00:00</span>
+                            </div>
+                        </div>
+
+                        <!-- 时间线主体 -->
+                        <div class="nle-timeline-wrapper">
+                            <!-- 时间标尺 -->
+                            <div class="nle-ruler">
+                                <div class="nle-ruler-header">TRACKS</div>
+                                <div class="nle-ruler-content">
+                                    <div class="nle-ruler-marks" id="nle-ruler-marks">
+                                        <!-- 动态生成时间刻度 -->
+                                    </div>
+                                    <div class="nle-playhead" id="nle-playhead" style="left: 0%;height: 500px;"></div>
+                                </div>
+                            </div>
+
+                            <!-- 轨道区域 -->
+                            <div class="nle-tracks" id="nle-tracks">
+                                <div style="padding:40px;text-align:center;color:#666;">
+                                    点击下方「加载分析数据」按钮加载视频分析结果
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 详情面板 -->
+                        <div class="nle-detail-panel" id="nle-detail-panel">
+                            <div class="nle-detail-title">
+                                📋 详情面板
+                            </div>
+                            <div class="nle-detail-content" id="nle-detail-content">
+                                选择时间线上的片段查看详细信息...
+                            </div>
+                        </div>
+                    </div>
+                    """)
+
+                    # 控制区域
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            tl_load_btn = gr.Button("📥 加载分析数据", elem_classes="primary-btn", size="lg")
+                        with gr.Column(scale=2):
+                            tl_current_time = gr.Slider(
+                                minimum=0,
+                                maximum=100,
+                                value=0,
+                                step=0.1,
+                                label="时间位置 (秒)",
+                                elem_id="tl-time-slider"
+                            )
+                        with gr.Column(scale=1):
+                            tl_time_display = gr.Textbox(
+                                label="当前时间码",
+                                value="00:00:00:00",
+                                interactive=False
+                            )
+                            fullscreen_btn = gr.Button("🖥️ 全屏", elem_classes="secondary-btn")
+
+                    gr.Markdown("---")
+
+                    # 隐藏的 HTML 组件用于存储各轨道数据
+                    tl_plot_display = gr.HTML(visible=False)
+                    tl_character_display = gr.HTML(visible=False)
+                    tl_scene_display = gr.HTML(visible=False)
+                    tl_props_display = gr.HTML(visible=False)
+                    tl_shot_display = gr.HTML(visible=False)
+
+                    # 底部预览区域
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            tl_frame_preview = gr.Image(
+                                label="当前帧",
+                                height=250
+                            )
+                        with gr.Column(scale=2):
+                            tl_frame_info = gr.Markdown("### 📋 片段详情\n选择时间线上的片段或拖动时间轴...")
+                            tl_ocr_text = gr.Textbox(
+                                label="OCR 文字",
+                                lines=2,
+                                interactive=False
+                            )
+
+                    # 隐藏变量用于存储视频源选择
+                    tl_video_source = gr.Dropdown(
+                        choices=["从视频拆解加载"],
+                        value="从视频拆解加载",
+                        visible=False
+                    )
+                    tl_video_upload = gr.File(visible=False)
 
         # 页脚
         gr.HTML("""
         <div style="text-align: center; padding: 30px 0; color: #86868b; font-size: 13px;">
-            AI 分镜 Pro v2.1 · 专业分镜制作系统
+            AI 分镜 Pro v2.2 · 专业分镜制作系统
         </div>
         """)
 
         # ========================================
         # 事件绑定
         # ========================================
+
+        # 苍何 API 统一配置保存
+        canghe_save_btn.click(
+            save_unified_canghe_config,
+            inputs=[canghe_unified_key, canghe_llm_enabled, canghe_img_enabled,
+                    canghe_video_enabled, canghe_image_model, canghe_video_model],
+            outputs=[canghe_save_status]
+        ).then(
+            get_canghe_api_status,
+            outputs=[canghe_status_display]
+        )
 
         # API 配置保存
         llm_save_btn.click(
@@ -6898,10 +11544,42 @@ def create_ui():
             outputs=[llm_save_status]
         )
 
+        # 苍何 API / ComfyUI 配置保存
         img_save_btn.click(
-            save_image_config,
-            inputs=[img_provider_cn, img_api_key_cn, img_api_url_cn, img_provider_intl, img_api_key_intl, img_api_url_intl],
+            save_canghe_config,
+            inputs=[img_provider_cn, canghe_api_key_input, canghe_model_select],
             outputs=[img_save_status]
+        )
+
+        # 图像模型手动切换
+        apply_img_model_btn.click(
+            apply_image_model,
+            inputs=[canghe_model_select],
+            outputs=[img_model_status]
+        )
+
+        # 图像引擎切换时更新 UI
+        img_provider_cn.change(
+            on_image_provider_change,
+            inputs=[img_provider_cn],
+            outputs=[canghe_config_group, comfyui_config_group]
+        )
+
+        # API 监控面板刷新
+        refresh_monitor_btn.click(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
+        )
+
+        # API 渠道测试
+        test_api_btn.click(
+            test_api_channels,
+            outputs=[api_test_html]
+        )
+
+        reset_tokens_btn.click(
+            reset_session_tokens,
+            outputs=[api_monitor_html]
         )
 
         # ComfyUI 连接状态
@@ -7038,7 +11716,11 @@ def create_ui():
             style_choice, standard_prompt, generated_prompt,
             workflow_step_indicator,
             step2_summary, step3_summary, step4_summary,
-            shot_cards_html  # 镜头卡片
+            shot_cards_html,  # 镜头卡片
+            # 新增：填充输入框
+            char_name, char_desc,  # 角色输入框
+            scene_name, scene_desc,  # 场景输入框
+            shot_desc, shot_template  # 镜头输入框
         ]
 
         # 加载范例后自动跳转到生成页面，激活三栏布局
@@ -7088,8 +11770,42 @@ def create_ui():
             lambda: (get_video_cards_html(), get_video_stats_html()),
             outputs=[video_cards_html, video_stats_html]
         ).then(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
+        ).then(
+            get_cli_output,
+            outputs=[cli_output_display]
+        ).then(
             fn=None,
-            js=load_example_js.replace('{id}', 'ai-generated')
+            js="""() => {
+                console.log('[AI 生成] 开始执行后处理JS...');
+
+                // 标记已加载
+                document.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+                document.getElementById('template-ai-generated')?.classList.add('selected');
+                document.body.classList.add('layout-active');
+
+                // 折叠范例模板区域
+                const templatesSection = document.querySelector('.templates-section');
+                if (templatesSection) {
+                    templatesSection.classList.add('collapsed');
+                    // 找到模板卡片容器（下一个兄弟Row元素）
+                    const templateCardsRow = templatesSection.closest('.column')?.querySelector(':scope > .row');
+                    if (templateCardsRow) {
+                        templateCardsRow.classList.remove('templates-expanded');
+                    }
+                }
+
+                // 滚动到工作流指示器
+                document.querySelector('.workflow-indicator')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+
+                // 延迟后切换到生成标签
+                setTimeout(() => {
+                    const tabs = document.querySelectorAll('[role=\"tablist\"] button');
+                    if(tabs[2]) tabs[2].click();  // 点击第3个标签(生成)
+                    console.log('[AI 生成] 已自动切换到生成标签页');
+                }, 500);
+            }"""
         )
 
         load_madao_btn.click(
@@ -7172,6 +11888,9 @@ def create_ui():
             ai_generate_character_desc,
             inputs=[char_name],
             outputs=[char_desc]
+        ).then(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
         )
 
         # AI 生成场景描述
@@ -7179,6 +11898,9 @@ def create_ui():
             ai_generate_scene_desc,
             inputs=[scene_name],
             outputs=[scene_desc]
+        ).then(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
         )
 
         # AI 生成镜头描述
@@ -7186,6 +11908,9 @@ def create_ui():
             ai_generate_shot_desc,
             inputs=[shot_template, shot_chars, shot_scene],
             outputs=[shot_desc]
+        ).then(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
         )
 
         # AI 优化提示词
@@ -7193,12 +11918,18 @@ def create_ui():
             ai_optimize_prompt,
             inputs=[original_prompt_input, optimize_style_select],
             outputs=[optimized_prompt_output]
+        ).then(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
         )
 
         # AI 生成项目摘要
         ai_summary_btn.click(
             ai_generate_project_summary,
             outputs=[ai_project_summary]
+        ).then(
+            get_api_monitor_html,
+            outputs=[api_monitor_html]
         )
 
         # CLI 输出刷新和清空
@@ -7380,8 +12111,36 @@ def create_ui():
 
         # 刷新视频卡片
         refresh_video_cards_btn.click(
-            lambda: (get_video_cards_html(), get_video_stats_html()),
-            outputs=[video_cards_html, video_stats_html]
+            lambda: (get_video_cards_html(), get_video_stats_html(), gr.update(choices=get_video_shot_choices())),
+            outputs=[video_cards_html, video_stats_html, video_shot_checkboxes]
+        )
+
+        # 选中镜头生成视频 - 全选
+        select_all_video_btn.click(
+            lambda: gr.update(value=get_video_shot_choices()),
+            outputs=[video_shot_checkboxes]
+        )
+
+        # 选中镜头生成视频 - 选择待生成
+        select_pending_video_btn.click(
+            lambda: gr.update(value=[c for c in get_video_shot_choices() if c.startswith("⏳")]),
+            outputs=[video_shot_checkboxes]
+        )
+
+        # 选中镜头生成视频 - 清空选择
+        clear_video_selection_btn.click(
+            lambda: gr.update(value=[]),
+            outputs=[video_shot_checkboxes]
+        )
+
+        # 生成选中镜头的视频
+        generate_selected_video_btn.click(
+            generate_selected_videos,
+            inputs=[video_shot_checkboxes, video_gen_mode_quick, video_style_quick, gr.State("5秒"), video_camera_quick],
+            outputs=[video_cli_output, selected_video_status, video_cards_html]
+        ).then(
+            lambda: (get_video_stats_html(), gr.update(choices=get_video_shot_choices())),
+            outputs=[video_stats_html, video_shot_checkboxes]
         )
 
         # 手动保存项目
@@ -7454,10 +12213,300 @@ def create_ui():
         )
 
         # ========================================
-        # 页面加载时检测 ComfyUI 状态
+        # AI 创作事件绑定
+        # ========================================
+
+        # ComfyUI 连接测试
+        comfyui_test_btn.click(
+            test_comfyui_connection,
+            inputs=[comfyui_host, comfyui_port],
+            outputs=[comfyui_status]
+        )
+
+        # 加载自定义工作流
+        load_workflow_btn.click(
+            load_custom_workflow,
+            inputs=[workflow_file],
+            outputs=[workflow_status]
+        )
+
+        # 分析剧情
+        analyze_story_btn.click(
+            analyze_story_text,
+            inputs=[story_input],
+            outputs=[
+                analyze_status,
+                extracted_characters,
+                extracted_scenes,
+                extracted_props,
+                ai_char_select,
+                ai_scene_select,
+                ai_prop_select,
+                batch_chars,
+                batch_scenes,
+                batch_props
+            ]
+        )
+
+        # 角色选择变更
+        ai_char_select.change(
+            on_character_selected,
+            inputs=[ai_char_select],
+            outputs=[ai_char_info]
+        )
+
+        # 生成角色提示语
+        generate_char_prompt_btn.click(
+            generate_character_prompt_ui,
+            inputs=[ai_char_select, ai_char_style],
+            outputs=[ai_char_prompt, ai_char_status]
+        )
+
+        # 生成角色图像
+        generate_char_image_btn.click(
+            generate_character_image_ui,
+            inputs=[ai_char_prompt, ai_char_ref],
+            outputs=[ai_char_preview, ai_char_review, ai_char_status]
+        )
+
+        # 采用角色
+        adopt_char_btn.click(
+            adopt_character_image,
+            inputs=[ai_char_select],
+            outputs=[ai_char_status, char_list]
+        ).then(
+            lambda: get_project_summary(),
+            outputs=[project_summary]
+        )
+
+        # 场景选择变更
+        ai_scene_select.change(
+            on_scene_selected,
+            inputs=[ai_scene_select],
+            outputs=[ai_scene_info]
+        )
+
+        # 生成场景提示语
+        generate_scene_prompt_btn.click(
+            generate_scene_prompt_ui,
+            inputs=[ai_scene_select, ai_scene_style],
+            outputs=[ai_scene_prompt, ai_scene_status]
+        )
+
+        # 生成场景图像
+        generate_scene_image_btn.click(
+            generate_scene_image_ui,
+            inputs=[ai_scene_prompt, ai_scene_ref],
+            outputs=[ai_scene_preview, ai_scene_review, ai_scene_status]
+        )
+
+        # 采用场景
+        adopt_scene_btn.click(
+            adopt_scene_image,
+            inputs=[ai_scene_select],
+            outputs=[ai_scene_status, scene_list]
+        ).then(
+            lambda: get_project_summary(),
+            outputs=[project_summary]
+        )
+
+        # 批量生成
+        batch_generate_btn.click(
+            batch_generate_assets,
+            inputs=[batch_chars, batch_scenes, batch_props, batch_style],
+            outputs=[batch_progress, batch_gallery]
+        )
+
+        # ========================================
+        # 剧本转分镜手册事件绑定
+        # ========================================
+
+        # 加载故事文件
+        load_story_btn.click(
+            load_story_from_file,
+            inputs=[manual_story_file],
+            outputs=[manual_story_input]
+        )
+
+        # 生成视频制作手册
+        generate_manual_btn.click(
+            generate_video_production_manual,
+            inputs=[manual_story_input, manual_style, manual_aspect, manual_detail_level],
+            outputs=[manual_status, manual_output]
+        )
+
+        # 导出手册
+        export_manual_btn.click(
+            export_production_manual,
+            outputs=[manual_status]
+        )
+
+        # ========================================
+        # 视频分析事件绑定
+        # ========================================
+
+        # 测试连接
+        test_va_connections_btn.click(
+            test_video_analysis_connections,
+            inputs=[ollama_host, ollama_port],
+            outputs=[va_connection_status]
+        )
+
+        # 视频上传
+        video_input.change(
+            on_video_uploaded,
+            inputs=[video_input],
+            outputs=[video_info_display, timeline_slider]
+        )
+
+        # 开始分析
+        start_analysis_btn.click(
+            start_video_analysis,
+            inputs=[
+                video_input,
+                extraction_mode,
+                interval_seconds,
+                max_frames,
+                ollama_host,
+                ollama_port
+            ],
+            outputs=[
+                analysis_progress,
+                story_summary_display,
+                story_structure_display,
+                storyboard_display,
+                va_characters_list,
+                va_scenes_list,
+                va_shots_list,
+                va_story_points_list,
+                frames_gallery,
+                timeline_slider
+            ]
+        )
+
+        # 时间轴滑动
+        timeline_slider.change(
+            on_timeline_change,
+            inputs=[timeline_slider],
+            outputs=[
+                timeline_frame_preview,
+                timeline_frame_info,
+                timeline_frame_tags,
+                timeline_frame_ocr
+            ]
+        )
+
+        # 保存概览修改
+        save_overview_btn.click(
+            save_overview_changes,
+            inputs=[story_summary_display, story_structure_display],
+            outputs=[analysis_progress]
+        )
+
+        # 保存分镜脚本
+        save_storyboard_btn.click(
+            save_storyboard_changes,
+            inputs=[storyboard_display],
+            outputs=[analysis_progress]
+        )
+
+        # 导出PDF
+        export_pdf_btn.click(
+            export_pdf_report,
+            outputs=[export_status, export_file_output]
+        )
+
+        # 保存分析结果
+        export_json_btn.click(
+            save_analysis_result,
+            outputs=[export_status, export_file_output]
+        )
+
+        # 加载历史结果
+        load_result_btn.click(
+            load_analysis_result,
+            inputs=[load_result_file],
+            outputs=[
+                export_status,
+                story_summary_display,
+                story_structure_display,
+                storyboard_display,
+                va_characters_list,
+                va_scenes_list,
+                va_shots_list,
+                va_story_points_list,
+                frames_gallery
+            ]
+        )
+
+        # 清理管理
+        check_cleanup_btn.click(
+            check_cleanup_info,
+            outputs=[cleanup_info_display]
+        )
+
+        confirm_cleanup_btn.click(
+            confirm_cleanup,
+            outputs=[cleanup_info_display, cleanup_status]
+        )
+
+        # ========================================
+        # 时间线可视化事件绑定
+        # ========================================
+
+        # 加载时间线数据 - 生成 NLE 风格时间线
+        tl_load_btn.click(
+            load_timeline_data,
+            outputs=[
+                nle_timeline_html,  # NLE 时间线主体
+                tl_current_time,    # 时间滑块
+                tl_time_display,    # 时间码显示
+                tl_plot_display,    # 隐藏的轨道 (兼容)
+                tl_character_display,
+                tl_scene_display,
+                tl_props_display,
+                tl_shot_display,
+                tl_frame_preview,   # 帧预览
+                tl_frame_info,      # 详情文本
+                tl_ocr_text         # OCR 文字
+            ]
+        )
+
+        # 时间轴拖动 - 更新播放头位置和详情
+        tl_current_time.change(
+            update_timeline_tracks,
+            inputs=[tl_current_time],
+            outputs=[
+                nle_timeline_html,  # NLE 时间线 (播放头移动)
+                tl_time_display,    # 时间码
+                tl_plot_display,    # 隐藏的轨道 (兼容)
+                tl_character_display,
+                tl_scene_display,
+                tl_props_display,
+                tl_shot_display,
+                tl_frame_preview,   # 帧预览
+                tl_frame_info,      # 详情
+                tl_ocr_text         # OCR
+            ]
+        )
+
+        # 全屏按钮
+        fullscreen_btn.click(
+            None,
+            js="() => { const elem = document.getElementById('nle-fullscreen'); if (!document.fullscreenElement) { elem.requestFullscreen(); } else { document.exitFullscreen(); } }"
+        )
+
+        # 页面加载时检测 ComfyUI 状态和苍何配置
         def on_page_load():
             status_html, _ = get_comfyui_status()
-            return status_html
+            # 根据保存的配置决定显示哪个配置组
+            backend = get_saved_image_backend()
+            is_canghe = "苍何" in backend
+            return (
+                status_html,
+                gr.update(visible=is_canghe),
+                gr.update(visible=not is_canghe)
+            )
 
         # 镜头预览弹窗初始化 JavaScript
         shot_modal_init_js = """
@@ -7547,8 +12596,14 @@ def create_ui():
 
         demo.load(
             on_page_load,
-            outputs=[comfyui_status_html],
+            outputs=[comfyui_status_html, canghe_config_group, comfyui_config_group],
             js=shot_modal_init_js
+        )
+
+        # CLI 日志定时刷新事件绑定
+        cli_timer.tick(
+            fn=get_cli_output,
+            outputs=[cli_output_display]
         )
 
     return demo
@@ -7559,6 +12614,8 @@ def create_ui():
 # ========================================
 
 if __name__ == "__main__":
+    import sys
+    print("[启动] 开始启动服务...", flush=True)
     # Check if setup is needed
     if needs_setup():
         print("\n" + "=" * 50)
@@ -7576,42 +12633,58 @@ if __name__ == "__main__":
         reload_settings()
         API_KEY = settings.api_key
 
-    # Validate configuration (warnings only, don't block startup)
+    # Validate configuration
     errors = settings.validate()
     if errors:
         print("\n" + "=" * 50)
-        print("  Configuration Warning")
+        print("  Configuration Error")
         print("=" * 50)
         for error in errors:
             print(f"  - {error}")
-        print("\nSome features may not work. Run 'python setup_wizard.py' to configure.")
-        print("Continuing startup...\n")
+        print("\nPlease run: python setup_wizard.py")
+        exit(1)
 
     # 设置静态文件路径（Gradio 6.x文件服务）
-    static_paths = [
-        str(OUTPUTS_DIR),
-        str(ASSETS_DIR),
-        str(BASE_DIR / "projects"),
-    ]
-    gr.set_static_paths(paths=static_paths)
+    # 使用相对路径
+    static_paths = ["outputs", "assets", "projects"]
+    print("[启动] 设置静态路径...", flush=True)
+    try:
+        gr.set_static_paths(paths=static_paths)
+        print("[启动] 静态路径设置完成", flush=True)
+    except Exception as e:
+        print(f"[启动] 静态路径设置失败: {e}", flush=True)
 
-    # 自动连接 ComfyUI
-    auto_connect_comfyui()
+    # 加载用户保存的配置（API Key 等）
+    saved_config = load_user_config()
+    if saved_config:
+        print("[启动] 已加载用户配置", flush=True)
 
+    print("[启动] 正在创建界面...", flush=True)
     demo = create_ui()
+    print("[启动] 界面创建完成", flush=True)
+
+    # 启动时自动连接 ComfyUI
+    print("[启动] 正在连接 ComfyUI...", flush=True)
+    auto_connect_comfyui()
+    print("[启动] ComfyUI 连接完成", flush=True)
 
     # 允许 Gradio 访问输出目录的文件（用于视频预览）
-    allowed_paths = [
-        str(OUTPUTS_DIR),
-        str(ASSETS_DIR),
-        str(BASE_DIR / "projects"),
-    ]
+    # 使用相对路径避免启动hang问题
+    allowed_paths = ["outputs", "assets", "projects"]
 
-    demo.launch(
-        server_name=settings.gradio_host,
-        server_port=settings.gradio_port,
-        share=False,
-        inbrowser=True,
-        css=CUSTOM_CSS,
-        allowed_paths=allowed_paths
-    )
+    print("[启动] 正在启动 Gradio 服务器...", flush=True)
+    print(f"[启动] 配置: host={settings.gradio_host}, port={settings.gradio_port}", flush=True)
+    print(f"[启动] allowed_paths={allowed_paths}", flush=True)
+
+    try:
+        demo.launch(
+            server_name=settings.gradio_host,
+            server_port=settings.gradio_port,
+            share=False,
+            inbrowser=False,  # Changed to False to avoid hang when running from CLI
+            allowed_paths=allowed_paths
+        )
+        print("[启动] Gradio 服务器启动成功!", flush=True)
+    except Exception as e:
+        print(f"[启动] Gradio 启动失败: {e}", flush=True)
+        raise

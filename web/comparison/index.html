@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI分镜项目对比分析</title>
+    <style>
+        :root {
+            --primary-a: #6366f1;
+            --primary-b: #10b981;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, var(--primary-a), var(--primary-b));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            padding: 12px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        nav a:hover {
+            border-color: var(--primary-a);
+            transform: translateY(-2px);
+        }
+
+        .icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 60px;
+        }
+
+        @media (max-width: 900px) {
+            .comparison-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .project-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .project-card.project-a {
+            border-color: var(--primary-a);
+        }
+
+        .project-card.project-b {
+            border-color: var(--primary-b);
+        }
+
+        .project-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .project-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+
+        .project-a .project-icon {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+
+        .project-b .project-icon {
+            background: linear-gradient(135deg, #10b981, #14b8a6);
+        }
+
+        .project-title h2 {
+            font-size: 1.5rem;
+            margin-bottom: 4px;
+        }
+
+        .project-title p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tech-tag {
+            padding: 6px 12px;
+            background: rgba(99, 102, 241, 0.1);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .project-b .tech-tag {
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature-list li {
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-check {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .project-a .feature-check {
+            color: var(--primary-a);
+        }
+
+        .project-b .feature-check {
+            color: var(--primary-b);
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 1.8rem;
+            margin-bottom: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .section-title svg {
+            width: 32px;
+            height: 32px;
+            color: var(--primary-a);
+        }
+
+        .comparison-table {
+            width: 100%;
+            background: var(--bg-card);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 60px;
+        }
+
+        .comparison-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 16px 20px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .comparison-table th {
+            background: rgba(99, 102, 241, 0.1);
+            font-weight: 600;
+        }
+
+        .comparison-table th:first-child {
+            width: 25%;
+        }
+
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .comparison-table .col-a {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .comparison-table .col-b {
+            background: rgba(16, 185, 129, 0.05);
+        }
+
+        .status-yes {
+            color: #22c55e;
+        }
+
+        .status-no {
+            color: #ef4444;
+        }
+
+        .status-partial {
+            color: #f59e0b;
+        }
+
+        .summary-box {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+
+        .summary-box h3 {
+            font-size: 1.3rem;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .summary-box p {
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .legend-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.a {
+            background: var(--primary-a);
+        }
+
+        .legend-dot.b {
+            background: var(--primary-b);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI 分镜项目对比分析</h1>
+            <p class="subtitle">客观公正地对比两个AI驱动的专业分镜制作系统</p>
+
+            <nav>
+                <a href="index.html">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                    </svg>
+                    总览
+                </a>
+                <a href="architecture.html">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                    </svg>
+                    技术架构
+                </a>
+                <a href="workflow.html">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                    工作流程
+                </a>
+                <a href="features.html">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                    功能特性
+                </a>
+            </nav>
+        </header>
+
+        <div class="legend">
+            <div class="legend-item">
+                <span class="legend-dot a"></span>
+                <span>AI 智能分镜 Pro (本项目)</span>
+            </div>
+            <div class="legend-item">
+                <span class="legend-dot b"></span>
+                <span>分镜大师 Storyboard Studio</span>
+            </div>
+        </div>
+
+        <div class="comparison-grid">
+            <div class="project-card project-a">
+                <div class="project-header">
+                    <div class="project-icon">🎬</div>
+                    <div class="project-title">
+                        <h2>AI 智能分镜 Pro</h2>
+                        <p>v2.2 | Web + API + Mobile</p>
+                    </div>
+                </div>
+
+                <div class="tech-stack">
+                    <span class="tech-tag">Python</span>
+                    <span class="tech-tag">Gradio</span>
+                    <span class="tech-tag">FastAPI</span>
+                    <span class="tech-tag">Flutter</span>
+                    <span class="tech-tag">Pydantic</span>
+                </div>
+
+                <ul class="feature-list">
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>Web UI + REST API + 移动端三端覆盖</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>9种专业镜头模板系统 (T1-T9)</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>苍何API + ComfyUI 双后端</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>智能文件导入 (PDF/Word/Markdown)</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>Claude Code CLI 集成</span>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="project-card project-b">
+                <div class="project-header">
+                    <div class="project-icon">🎥</div>
+                    <div class="project-title">
+                        <h2>分镜大师 Storyboard Studio</h2>
+                        <p>桌面应用 | 跨平台</p>
+                    </div>
+                </div>
+
+                <div class="tech-stack">
+                    <span class="tech-tag">.NET 8.0</span>
+                    <span class="tech-tag">Avalonia</span>
+                    <span class="tech-tag">SQLite</span>
+                    <span class="tech-tag">FFmpeg</span>
+                    <span class="tech-tag">C#</span>
+                </div>
+
+                <ul class="feature-list">
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>本地优先设计，数据完全私有</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>视频导入 + 4种智能抽帧方法</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>通义千问 + 火山引擎 + OpenAI</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>内置 FFmpeg 视频处理</span>
+                    </li>
+                    <li>
+                        <svg class="feature-check" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                        <span>SQLite 本地数据库存储</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <h2 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            核心指标对比
+        </h2>
+
+        <div class="comparison-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>维度</th>
+                        <th class="col-a">AI 智能分镜 Pro</th>
+                        <th class="col-b">分镜大师 Storyboard</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>技术栈</strong></td>
+                        <td class="col-a">Python (Gradio + FastAPI)</td>
+                        <td class="col-b">.NET 8.0 (Avalonia)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>部署形式</strong></td>
+                        <td class="col-a">Web应用 + REST API + 移动端</td>
+                        <td class="col-b">桌面应用（跨平台）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>数据存储</strong></td>
+                        <td class="col-a">JSON文件 + 文件系统</td>
+                        <td class="col-b">SQLite 嵌入式数据库</td>
+                    </tr>
+                    <tr>
+                        <td><strong>AI图像生成</strong></td>
+                        <td class="col-a">苍何API / ComfyUI本地</td>
+                        <td class="col-b">通义千问 / 火山引擎</td>
+                    </tr>
+                    <tr>
+                        <td><strong>AI视频生成</strong></td>
+                        <td class="col-a">苍何API (即梦等)</td>
+                        <td class="col-b">火山引擎</td>
+                    </tr>
+                    <tr>
+                        <td><strong>视频导入分析</strong></td>
+                        <td class="col-a">视频分析模块 (抽帧+OCR)</td>
+                        <td class="col-b">FFmpeg + 4种抽帧算法</td>
+                    </tr>
+                    <tr>
+                        <td><strong>模板系统</strong></td>
+                        <td class="col-a">9种镜头模板 (T1-T9)</td>
+                        <td class="col-b">专业电影参数</td>
+                    </tr>
+                    <tr>
+                        <td><strong>离线能力</strong></td>
+                        <td class="col-a">ComfyUI本地生成</td>
+                        <td class="col-b">完全本地优先</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="summary-box">
+            <h3>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+                客观总结
+            </h3>
+            <p><strong>AI 智能分镜 Pro</strong> 采用Web优先的设计理念，提供灵活的三端覆盖（Web UI / REST API / 移动端），适合需要远程协作、API集成或移动办公的团队。其9种镜头模板系统提供了规范化的创作流程。</p>
+            <p><strong>分镜大师 Storyboard Studio</strong> 采用本地优先的桌面应用架构，数据完全私有化存储，更适合对数据安全性要求高、网络环境不稳定或偏好传统桌面软件的用户。视频导入和智能抽帧是其特色功能。</p>
+            <p>两个项目在核心功能上有相似之处，但在技术架构和使用场景上各有侧重，用户可根据实际需求选择。</p>
+        </div>
+
+        <footer>
+            <p>对比分析报告 | 生成于 2026-02-03 | 客观公正，仅供参考</p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI 分镜 Pro 仪表盘概览</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922", // Matching the requested dark theme base
+                        "surface-dark": "#111a22", // Slightly lighter for main area
+                        "panel-dark": "#16202a", // Right panel
+                        "card-dark": "#1e2936", // Cards
+                        "border-dark": "#233648",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-hidden h-screen flex flex-col">
+<header class="shrink-0 flex items-center justify-between whitespace-nowrap border-b border-solid border-border-dark px-6 py-3 bg-background-dark z-20">
+<div class="flex items-center gap-4 text-white">
+<div class="size-8 rounded bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined" style="font-size: 20px;">movie_filter</span>
+</div>
+<h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">AI 分镜 Pro</h2>
+</div>
+<div class="flex gap-3 items-center">
+<div class="hidden md:flex items-center gap-2 px-3 py-1.5 bg-[#1e2936] rounded-full border border-border-dark">
+<div class="relative flex items-center justify-center size-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full size-2 bg-green-500"></span>
+</div>
+<span class="text-xs font-mono text-gray-300">系统运行中</span>
+</div>
+<button class="flex items-center justify-center size-10 rounded-lg hover:bg-border-dark transition-colors text-gray-400 hover:text-white">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center size-10 rounded-lg hover:bg-border-dark transition-colors text-gray-400 hover:text-white">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="size-8 rounded-full bg-gradient-to-br from-primary to-purple-600 border border-white/20 ml-2" data-alt="User Avatar"></div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<main class="flex-1 flex flex-col overflow-y-auto bg-surface-dark relative">
+<div class="flex flex-col max-w-[1200px] w-full mx-auto p-6 md:p-10 gap-8">
+<div class="w-full">
+<div class="bg-cover bg-center flex flex-col justify-end overflow-hidden rounded-xl min-h-[240px] relative group border border-border-dark shadow-2xl" data-alt="Abstract cinematic lighting gradient background purple and blue" style='background-image: linear-gradient(0deg, rgba(16, 25, 34, 0.9) 0%, rgba(16, 25, 34, 0.4) 60%, rgba(16, 25, 34, 0.1) 100%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuDWDF9lbXE173X0-AkNBRlwlpvQrQyMXh-sfHT5GVi3PozLVMW6JH9-mn2B2FSZHuzmAj2ucrN0o01dMcHyMjDIB_zk0Yz7YT2Z7Yy1agBM7-P745M0AWWI3dhTcYztCK7DIIi73eLrbLa1oQRJLx9tSBhl0HzFKniHzsGSNZcs6mvRrN6yMPyXTruRREXd2UxyLesoTYQW3m6ejHkNJXy1kZNJSLQYucLI1zFWaFJIwNmIGiprAgPOZeTBq2cIEz19-dzM0tH99JE");'>
+<div class="absolute top-4 right-4 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full text-xs font-medium border border-white/10 text-white/80">
+                            v2.4.0-beta
+                        </div>
+<div class="flex flex-col p-6 z-10">
+<h1 class="text-white tracking-tight text-3xl font-bold leading-tight mb-2">欢迎回来，导演。</h1>
+<p class="text-gray-300 text-lg max-w-2xl">准备好构思您的下一个场景了吗？您的渲染引擎已准备就绪。</p>
+<div class="flex gap-3 mt-6">
+<button class="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                                    新建项目
+                                </button>
+<button class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-5 py-2.5 rounded-lg font-medium backdrop-blur-sm transition-all border border-white/10">
+<span class="material-symbols-outlined text-[20px]">folder_open</span>
+                                    打开最近
+                                </button>
+</div>
+</div>
+</div>
+</div>
+<div>
+<h3 class="text-white text-lg font-bold leading-tight tracking-[-0.015em] mb-4">工作流操作</h3>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="group flex flex-col gap-3 p-4 rounded-xl bg-card-dark border border-border-dark hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(19,127,236,0.15)] cursor-pointer">
+<div class="w-full h-32 rounded-lg bg-gradient-to-br from-blue-900/40 to-slate-900 border border-white/5 flex items-center justify-center mb-1 group-hover:scale-[1.02] transition-transform">
+<span class="material-symbols-outlined text-primary text-4xl">edit_document</span>
+</div>
+<div>
+<p class="text-white text-base font-bold leading-normal group-hover:text-primary transition-colors">创建</p>
+<p class="text-[#92adc9] text-sm font-normal leading-normal">定义角色与场景</p>
+</div>
+</div>
+<div class="group flex flex-col gap-3 p-4 rounded-xl bg-card-dark border border-border-dark hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(19,127,236,0.15)] cursor-pointer">
+<div class="w-full h-32 rounded-lg bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-white/5 flex items-center justify-center mb-1 group-hover:scale-[1.02] transition-transform">
+<span class="material-symbols-outlined text-indigo-400 text-4xl">view_timeline</span>
+</div>
+<div>
+<p class="text-white text-base font-bold leading-normal group-hover:text-indigo-400 transition-colors">编排</p>
+<p class="text-[#92adc9] text-sm font-normal leading-normal">时间轴与分镜表</p>
+</div>
+</div>
+<div class="group flex flex-col gap-3 p-4 rounded-xl bg-card-dark border border-border-dark hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(19,127,236,0.15)] cursor-pointer">
+<div class="w-full h-32 rounded-lg bg-gradient-to-br from-purple-900/40 to-slate-900 border border-white/5 flex items-center justify-center mb-1 group-hover:scale-[1.02] transition-transform">
+<span class="material-symbols-outlined text-purple-400 text-4xl">auto_awesome</span>
+</div>
+<div>
+<p class="text-white text-base font-bold leading-normal group-hover:text-purple-400 transition-colors">生成</p>
+<p class="text-[#92adc9] text-sm font-normal leading-normal">文生图渲染</p>
+</div>
+</div>
+<div class="group flex flex-col gap-3 p-4 rounded-xl bg-card-dark border border-border-dark hover:border-primary/50 transition-all hover:shadow-[0_0_15px_rgba(19,127,236,0.15)] cursor-pointer">
+<div class="w-full h-32 rounded-lg bg-gradient-to-br from-teal-900/40 to-slate-900 border border-white/5 flex items-center justify-center mb-1 group-hover:scale-[1.02] transition-transform">
+<span class="material-symbols-outlined text-teal-400 text-4xl">ios_share</span>
+</div>
+<div>
+<p class="text-white text-base font-bold leading-normal group-hover:text-teal-400 transition-colors">导出</p>
+<p class="text-[#92adc9] text-sm font-normal leading-normal">PDF, HTML &amp; 视频故事板</p>
+</div>
+</div>
+</div>
+</div>
+<div>
+<div class="flex items-center justify-between px-1 pb-4 pt-2">
+<h3 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">快速开始模版</h3>
+<button class="text-primary text-sm font-medium hover:underline">查看全部</button>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="flex items-stretch justify-between gap-4 rounded-xl bg-card-dark p-4 border border-border-dark hover:border-white/20 transition-colors shadow-lg">
+<div class="flex flex-[2_2_0px] flex-col justify-between gap-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2 mb-1">
+<span class="bg-orange-500/20 text-orange-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded">剧情片</span>
+</div>
+<p class="text-white text-base font-bold leading-tight">咖啡馆邂逅</p>
+<p class="text-[#92adc9] text-sm font-normal leading-normal line-clamp-2">具有复杂光照要求的亲密对话场景。非常适合角色研究。</p>
+<p class="text-xs text-gray-500 mt-2 font-mono">2 角色 • 5 镜头</p>
+</div>
+<button class="flex items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-[#233648] hover:bg-[#2d445a] text-white text-sm font-medium leading-normal w-fit transition-colors gap-2">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                                    加载模版
+                                </button>
+</div>
+<div class="w-1/3 bg-center bg-no-repeat bg-cover rounded-lg border border-white/10" data-alt="Cinematic shot of a cafe interior with warm lighting" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCqxg2XXpKwnhi8ClU6tsIk1Fdu_uzxUarJPFHivOIM8llL70cRaQmYGOkV0E-8mY2-uLn0ZLiQ1EuO0emE3d0DTR5adI5-H1D8AtF-tkonFts7U2t9Ww9j-rhf2cE4IYttekAdtk2AQwuUmRHaw5PAY7yOEgwh-BLjw6lnRMMMQ_OyYxZmqfGBlwTqiX2U86rlKJfK_98VciiKWB53OPMqjGAWt0UL2OtbvoWk5HbSBuS68I698j0TUYsdQKPJPL93impWbfwshqk");'></div>
+</div>
+<div class="flex items-stretch justify-between gap-4 rounded-xl bg-card-dark p-4 border border-border-dark hover:border-white/20 transition-colors shadow-lg">
+<div class="flex flex-[2_2_0px] flex-col justify-between gap-4">
+<div class="flex flex-col gap-1">
+<div class="flex items-center gap-2 mb-1">
+<span class="bg-blue-500/20 text-blue-400 text-[10px] uppercase font-bold px-2 py-0.5 rounded">动作片</span>
+</div>
+<p class="text-white text-base font-bold leading-tight">城市追逐</p>
+<p class="text-[#92adc9] text-sm font-normal leading-normal line-clamp-2">深夜霓虹街道上的高能追逐戏码。</p>
+<p class="text-xs text-gray-500 mt-2 font-mono">4 角色 • 12 镜头</p>
+</div>
+<button class="flex items-center justify-center overflow-hidden rounded-lg h-9 px-4 bg-[#233648] hover:bg-[#2d445a] text-white text-sm font-medium leading-normal w-fit transition-colors gap-2">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                                    加载模版
+                                </button>
+</div>
+<div class="w-1/3 bg-center bg-no-repeat bg-cover rounded-lg border border-white/10" data-alt="Cyberpunk city street at night with neon lights" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAw8x0ALCq6QFBXGUoc1Phujm2A7fYktUQkRZWg24iCZIXD86RyLfiVT48xOcSncYUj62gPvPU2LtuDTMW5dnkciov7fXc_0XvkrOSJJ_W6qBH8mD-HpLeERKSX_Y63rxckZIMC13-LHNhl3mJ3NFbNIU1gEyYdztQpr_ausSDXLxknCz74-S89AOIwZCcwf0Dbkk13Ht0jwe9oIorZn94JyuiBMXLbSNonheD7R_1_kzSV8hUnbe2tqb8SzAeuMfR0ui2GQbxPP1I");'></div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<aside class="w-[320px] shrink-0 border-l border-border-dark bg-panel-dark flex flex-col z-10 shadow-[-5px_0_15px_rgba(0,0,0,0.2)]">
+<div class="p-5 border-b border-border-dark">
+<h3 class="text-white font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-gray-400 text-[18px]">tune</span>
+                    引擎设置
+                </h3>
+</div>
+<div class="flex-1 overflow-y-auto p-5 flex flex-col gap-6">
+<div class="flex flex-col gap-2">
+<label class="text-gray-400 text-xs font-semibold uppercase tracking-wide">语言模型服务商</label>
+<div class="relative">
+<select class="w-full bg-[#1e2936] border border-border-dark text-white text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 appearance-none">
+<option selected="">Claude 3.5 Sonnet</option>
+<option>GPT-4o</option>
+<option>Stable Diffusion XL</option>
+<option>Midjourney V6 (API)</option>
+<option>Local (Llama 3)</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+<span class="material-symbols-outlined text-[20px]">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-gray-400 text-xs font-semibold uppercase tracking-wide">API 密钥</label>
+<div class="relative">
+<input class="w-full bg-[#1e2936] border border-border-dark text-gray-400 text-sm rounded-lg focus:ring-primary focus:border-primary block p-2.5 font-mono" readonly="" type="password" value="sk-ant-xxxxxxxxxxxxxxxx"/>
+<button class="absolute inset-y-0 right-0 flex items-center px-3 text-primary hover:text-white font-medium text-xs">
+                            编辑
+                        </button>
+</div>
+<p class="text-[10px] text-green-500 flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span>
+                        已验证且安全
+                    </p>
+</div>
+<div class="flex flex-col gap-4 border-t border-border-dark pt-4">
+<div class="flex justify-between items-center">
+<label class="text-gray-400 text-xs font-semibold">创造力 (Temp)</label>
+<span class="text-xs text-white font-mono">0.7</span>
+</div>
+<input class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary" type="range"/>
+<div class="flex justify-between items-center mt-2">
+<label class="text-gray-400 text-xs font-semibold">最大 Token 数</label>
+<span class="text-xs text-white font-mono">4096</span>
+</div>
+<input class="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary" type="range"/>
+</div>
+<div class="flex flex-col gap-2 border-t border-border-dark pt-4">
+<label class="text-gray-400 text-xs font-semibold uppercase tracking-wide">输出纵横比</label>
+<div class="grid grid-cols-3 gap-2">
+<button class="bg-primary text-white text-xs py-1.5 rounded border border-primary font-medium">16:9</button>
+<button class="bg-[#1e2936] hover:bg-[#28384a] text-gray-400 text-xs py-1.5 rounded border border-border-dark">2.39:1</button>
+<button class="bg-[#1e2936] hover:bg-[#28384a] text-gray-400 text-xs py-1.5 rounded border border-border-dark">4:3</button>
+</div>
+</div>
+</div>
+<div class="h-1/3 bg-black border-t border-border-dark flex flex-col font-mono text-xs">
+<div class="bg-[#1e2936] px-4 py-1.5 border-b border-white/5 flex items-center justify-between">
+<span class="text-gray-400 font-bold text-[10px] uppercase">CLI 实时反馈</span>
+<div class="flex gap-1.5">
+<div class="size-2 rounded-full bg-red-500/50"></div>
+<div class="size-2 rounded-full bg-yellow-500/50"></div>
+<div class="size-2 rounded-full bg-green-500/50"></div>
+</div>
+</div>
+<div class="flex-1 p-3 overflow-y-auto text-green-500/90 space-y-1">
+<p class="opacity-50">上次登录: 今天 09:41:22 on ttys001</p>
+<p>&gt; 正在初始化核心模块...</p>
+<p class="text-blue-400">&gt; [INFO] 已连接 Claude 3.5 Sonnet API</p>
+<p>&gt; [INFO] 模型权重已验证</p>
+<p>&gt; [INFO] 正在加载模版 '咖啡馆邂逅'...</p>
+<p class="text-white">&gt; [SUCCESS] 资源已加载 (124ms)</p>
+<p>&gt; 等待提示词输入<span class="animate-pulse">_</span></p>
+</div>
+</div>
+</aside>
+</div>
+
+</body></html>

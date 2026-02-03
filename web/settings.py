@@ -1,8 +1,9 @@
 """
-AI Storyboard Pro - Unified Configuration Settings
+AI Storyboard Pro v2.2 - 统一配置管理
 
-This module provides centralized configuration management,
-loading settings from environment variables with sensible defaults.
+支持两种图像生成后端:
+1. 苍何 API (Canghe API) - 云端生成
+2. ComfyUI - 本地生成
 """
 
 import os
@@ -13,59 +14,59 @@ from dataclasses import dataclass, field
 
 
 def _load_dotenv():
-    """Load .env file if it exists."""
+    """加载 .env 文件"""
     env_path = Path(__file__).parent / ".env"
     if env_path.exists():
         try:
             with open(env_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    # Skip empty lines and comments
+                    # 跳过空行和注释
                     if not line or line.startswith("#"):
                         continue
-                    # Parse key=value
+                    # 解析 key=value
                     if "=" in line:
                         key, _, value = line.partition("=")
                         key = key.strip()
                         value = value.strip()
-                        # Remove quotes if present
+                        # 移除引号
                         if value and value[0] in ('"', "'") and value[-1] == value[0]:
                             value = value[1:-1]
-                        # Only set if not already in environment
+                        # 仅当环境变量不存在时设置
                         if key and key not in os.environ:
                             os.environ[key] = value
         except Exception as e:
-            print(f"Warning: Failed to load .env file: {e}")
+            print(f"警告: 加载 .env 文件失败: {e}")
 
 
-# Load .env file on module import
+# 模块导入时加载 .env
 _load_dotenv()
 
 
 @dataclass
 class Settings:
-    """Application settings loaded from environment variables."""
+    """应用配置 - 从环境变量加载"""
 
     # ===========================================
-    # API Configuration
+    # 苍何 API 配置
     # ===========================================
     api_key: str = field(default_factory=lambda: os.environ.get(
-        "NANA_BANANA_API_KEY", ""
+        "CANGHE_API_KEY", ""
     ))
     api_base_url: str = field(default_factory=lambda: os.environ.get(
-        "NANA_BANANA_BASE_URL", "https://api.nanabanana.pro"
+        "CANGHE_API_BASE_URL", "https://api.canghe.ai"
     ))
 
     # ===========================================
-    # Image Generation Backend
+    # 图像生成后端
     # ===========================================
-    # Options: "api" (NanaBanana API), "comfyui" (Local ComfyUI), "mock" (Testing)
+    # 选项: "canghe" (苍何云端), "comfyui" (本地 ComfyUI)
     image_backend: str = field(default_factory=lambda: os.environ.get(
-        "IMAGE_BACKEND", "api"
+        "IMAGE_BACKEND", "canghe"
     ).lower())
 
     # ===========================================
-    # Server Configuration
+    # 服务器配置
     # ===========================================
     gradio_port: int = field(default_factory=lambda: int(os.environ.get(
         "GRADIO_PORT", "7861"
@@ -81,7 +82,7 @@ class Settings:
     ))
 
     # ===========================================
-    # CORS Configuration
+    # CORS 配置
     # ===========================================
     cors_origins: List[str] = field(default_factory=lambda: [
         origin.strip()
@@ -90,7 +91,7 @@ class Settings:
     ])
 
     # ===========================================
-    # File Upload Configuration
+    # 文件上传配置
     # ===========================================
     max_upload_size_mb: int = field(default_factory=lambda: int(os.environ.get(
         "MAX_UPLOAD_SIZE_MB", "50"
@@ -105,7 +106,7 @@ class Settings:
     ])
 
     # ===========================================
-    # Optional: ComfyUI Configuration
+    # ComfyUI 配置
     # ===========================================
     comfyui_enabled: bool = field(default_factory=lambda: os.environ.get(
         "COMFYUI_ENABLED", "false"
@@ -122,13 +123,13 @@ class Settings:
     ))
     comfyui_workflow_file: Optional[str] = field(default_factory=lambda: os.environ.get(
         "COMFYUI_WORKFLOW_FILE"
-    ))  # Direct path to a workflow JSON file
+    ))
     comfyui_model: str = field(default_factory=lambda: os.environ.get(
         "COMFYUI_MODEL", ""
-    ))  # Empty = auto-detect first available model
+    ))
 
     # ===========================================
-    # Optional: Ollama Configuration
+    # Ollama 配置 (可选)
     # ===========================================
     ollama_host: str = field(default_factory=lambda: os.environ.get(
         "OLLAMA_HOST", "localhost"
@@ -138,14 +139,14 @@ class Settings:
     )))
 
     # ===========================================
-    # Debug/Development
+    # 调试模式
     # ===========================================
     debug: bool = field(default_factory=lambda: os.environ.get(
         "DEBUG", "false"
     ).lower() in ("true", "1", "yes"))
 
     # ===========================================
-    # Directory Paths
+    # 目录路径
     # ===========================================
     base_dir: Path = field(default_factory=lambda: Path(__file__).parent.resolve())
 
@@ -175,7 +176,7 @@ class Settings:
 
     @property
     def comfyui_workflows_dir(self) -> Optional[Path]:
-        """ComfyUI workflow JSON directory."""
+        """ComfyUI 工作流目录"""
         if self.comfyui_workflow_dir:
             path = Path(self.comfyui_workflow_dir)
             if path.is_absolute():
@@ -185,11 +186,11 @@ class Settings:
 
     @property
     def max_upload_size_bytes(self) -> int:
-        """Maximum upload size in bytes."""
+        """最大上传大小(字节)"""
         return self.max_upload_size_mb * 1024 * 1024
 
     def ensure_directories(self) -> None:
-        """Create all required directories if they don't exist."""
+        """创建所有必需的目录"""
         directories = [
             self.assets_dir,
             self.projects_dir,
@@ -202,107 +203,112 @@ class Settings:
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
 
-        # Create asset subdirectories
+        # 创建资产子目录
         for subdir in ["characters", "scenes", "props", "styles"]:
             (self.assets_dir / subdir).mkdir(exist_ok=True)
 
     def validate(self, strict: bool = False) -> List[str]:
         """
-        Validate configuration and return list of errors.
+        验证配置
 
         Args:
-            strict: If True, treat warnings as errors (e.g., missing API key)
+            strict: 严格模式 - 将警告视为错误
 
         Returns:
-            List of error messages (empty if all valid)
+            错误消息列表 (空表示验证通过)
         """
         errors = []
 
-        # Check API key - warning only unless strict mode
-        if not self.api_key or self.api_key == "your_api_key_here":
-            if strict:
-                errors.append("NANA_BANANA_API_KEY is required for image generation")
-            else:
-                # Just print a warning, don't block startup
-                print("\n[WARNING] API key not configured - image generation will not work")
-                print("          Run 'python setup_wizard.py' to configure\n")
+        # 检查 API 密钥
+        if self.image_backend == "canghe":
+            if not self.api_key or self.api_key == "your_api_key_here":
+                if strict:
+                    errors.append("CANGHE_API_KEY 未配置 - 图像生成将无法使用")
+                else:
+                    print("\n[警告] 苍何 API 密钥未配置 - 图像生成将无法使用")
+                    print("       请在 .env 中设置 CANGHE_API_KEY\n")
 
-        # Validate ports
+        # 检查 ComfyUI 配置
+        if self.image_backend == "comfyui":
+            if not self.comfyui_enabled:
+                if strict:
+                    errors.append("IMAGE_BACKEND=comfyui 但 COMFYUI_ENABLED=false")
+                else:
+                    print("\n[警告] IMAGE_BACKEND=comfyui 但 COMFYUI_ENABLED=false")
+                    print("       请在 .env 中设置 COMFYUI_ENABLED=true\n")
+
+        # 验证端口
         if not (1 <= self.gradio_port <= 65535):
-            errors.append(f"GRADIO_PORT must be between 1 and 65535 (got {self.gradio_port})")
+            errors.append(f"GRADIO_PORT 必须在 1-65535 之间 (当前: {self.gradio_port})")
         if not (1 <= self.api_port <= 65535):
-            errors.append(f"API_PORT must be between 1 and 65535 (got {self.api_port})")
+            errors.append(f"API_PORT 必须在 1-65535 之间 (当前: {self.api_port})")
 
-        # Validate upload size
+        # 验证上传大小
         if self.max_upload_size_mb <= 0:
-            errors.append(f"MAX_UPLOAD_SIZE_MB must be positive (got {self.max_upload_size_mb})")
+            errors.append(f"MAX_UPLOAD_SIZE_MB 必须为正数 (当前: {self.max_upload_size_mb})")
 
         return errors
 
     def is_valid(self) -> bool:
-        """Check if configuration is valid."""
+        """检查配置是否有效"""
         return len(self.validate()) == 0
 
     def print_config(self, show_secrets: bool = False) -> None:
-        """Print current configuration for debugging."""
+        """打印当前配置"""
         print("\n" + "=" * 50)
-        print("AI Storyboard Pro - Configuration")
+        print("AI Storyboard Pro v2.2 - 配置信息")
         print("=" * 50)
 
-        # API
-        api_key_display = "***" + self.api_key[-8:] if self.api_key and len(self.api_key) > 8 else "NOT SET"
-        if show_secrets:
-            api_key_display = self.api_key or "NOT SET"
-        print(f"API Key: {api_key_display}")
-        print(f"API Base URL: {self.api_base_url}")
+        # 图像后端
+        print(f"\n图像生成后端: {self.image_backend.upper()}")
 
-        # Server
-        print(f"\nGradio Server: {self.gradio_host}:{self.gradio_port}")
-        print(f"API Server: {self.api_host}:{self.api_port}")
+        # API 配置 (苍何)
+        if self.image_backend == "canghe":
+            api_key_display = "***" + self.api_key[-8:] if self.api_key and len(self.api_key) > 8 else "未设置"
+            if show_secrets:
+                api_key_display = self.api_key or "未设置"
+            print(f"苍何 API Key: {api_key_display}")
+            print(f"苍何 API URL: {self.api_base_url}")
+
+        # ComfyUI 配置
+        if self.image_backend == "comfyui":
+            print(f"ComfyUI 启用: {self.comfyui_enabled}")
+            print(f"ComfyUI 地址: {self.comfyui_host}:{self.comfyui_port}")
+
+        # 服务器
+        print(f"\nGradio 服务: {self.gradio_host}:{self.gradio_port}")
+        print(f"API 服务: {self.api_host}:{self.api_port}")
 
         # CORS
-        print(f"\nCORS Origins: {', '.join(self.cors_origins)}")
+        print(f"\nCORS 源: {', '.join(self.cors_origins)}")
 
-        # Upload
-        print(f"\nMax Upload Size: {self.max_upload_size_mb} MB")
-        print(f"Allowed Extensions: {', '.join(self.allowed_extensions)}")
+        # 上传
+        print(f"\n最大上传: {self.max_upload_size_mb} MB")
+        print(f"允许扩展名: {', '.join(self.allowed_extensions)}")
 
-        # Optional services
-        if self.comfyui_host:
-            print(f"\nComfyUI: {self.comfyui_host}:{self.comfyui_port}")
-        print(f"Ollama: {self.ollama_host}:{self.ollama_port}")
-
-        # Debug
-        print(f"\nDebug Mode: {self.debug}")
+        # 调试
+        print(f"\n调试模式: {self.debug}")
         print("=" * 50 + "\n")
 
 
-# Global settings singleton
+# 全局设置单例
 settings = Settings()
 
 
 def get_settings() -> Settings:
-    """Get the global settings instance."""
+    """获取全局设置实例"""
     return settings
 
 
 def reload_settings() -> Settings:
-    """Reload settings from environment (useful after .env changes)."""
+    """重新加载设置"""
     global settings
     _load_dotenv()
     settings = Settings()
     return settings
 
 
-# Convenience function to check if setup is needed
 def needs_setup() -> bool:
-    """Check if the setup wizard should be run (only if no .env exists)."""
+    """检查是否需要运行设置向导"""
     env_path = Path(__file__).parent / ".env"
-
-    # No .env file exists - need first-time setup
-    if not env_path.exists():
-        return True
-
-    # .env exists - allow startup even with placeholder key
-    # User will see a warning but can still use the UI
-    return False
+    return not env_path.exists()

@@ -1,45 +1,178 @@
-# Environment and secrets
+# AI Storyboard Pro - Git Ignore
+
+# ===========================================
+# Environment and Secrets
+# ===========================================
 .env
 .env.local
 .env.*.local
-*.key
-*.pem
+*.env
 
+# Claude local configuration (may contain sensitive data)
+.claude/
+
+# ===========================================
 # Python
+# ===========================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
 venv/
 ENV/
+env/
 .venv/
 
-# IDE
-.vscode/
+# ===========================================
+# IDE and Editors
+# ===========================================
 .idea/
+.vscode/
 *.swp
 *.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
 
-# Project data (user-generated)
-projects/
+# ===========================================
+# Project Specific
+# ===========================================
+# Output directories
 outputs/
 exports/
-backups/
 uploads/
-pdf_outputs/
-prompt_outputs/
-video_analysis/
+projects/
 
-# Temporary files
+# Keep directory structure but ignore contents
+!outputs/.gitkeep
+!exports/.gitkeep
+!uploads/.gitkeep
+!projects/.gitkeep
+
+# Asset files (may contain user data)
+assets/characters/*
+assets/scenes/*
+assets/props/*
+assets/styles/*
+!assets/characters/.gitkeep
+!assets/scenes/.gitkeep
+!assets/props/.gitkeep
+!assets/styles/.gitkeep
+
+# ===========================================
+# Testing
+# ===========================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ===========================================
+# OS Files
+# ===========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ===========================================
+# Flutter/Mobile
+# ===========================================
+mobile/.dart_tool/
+mobile/.packages
+mobile/.pub/
+mobile/build/
+mobile/*.iml
+mobile/.idea/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/*.jks
+mobile/android/key.properties
+mobile/ios/Pods/
+mobile/ios/.symlinks/
+mobile/ios/Flutter/Flutter.framework/
+mobile/ios/Flutter/Flutter.podspec
+mobile/ios/ServiceDefinitions.json
+mobile/ios/Runner/GeneratedPluginRegistrant.*
+
+# ===========================================
+# Logs
+# ===========================================
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ===========================================
+# Temporary Files
+# ===========================================
 *.tmp
 *.temp
-*.log
-tmpclaude-*/
+*.bak
+*.cache
+.cache/
+tmpclaude-*
+nul
 
-# OS files
-.DS_Store
-Thumbs.db
+# ===========================================
+# Video Files (exclude from PR)
+# ===========================================
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+*.flv
+*.webm
 
-# ComfyUI workflow cache
-workflows/*.cache
+# ===========================================
+# Large Archives (outputs)
+# ===========================================
+outputs/**/*.zip
+
+# ===========================================
+# Sample Images (KEEP these)
+# ===========================================
+# Root sample images are tracked:
+# 2.png, 3.png, 4.png, 5.png
+!/*.png
+
+# ===========================================
+# Backup directories
+# ===========================================
+backups/
+
+# ===========================================
+# PDF outputs
+# ===========================================
+pdf_outputs/
+storyboard_outputs/
+prompt_outputs/

@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工作流程对比 - AI分镜项目对比</title>
+    <style>
+        :root {
+            --primary-a: #6366f1;
+            --primary-b: #10b981;
+            --bg-dark: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, var(--primary-a), var(--primary-b));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        nav {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+
+        nav a {
+            padding: 12px 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        nav a:hover, nav a.active {
+            border-color: var(--primary-a);
+        }
+
+        .workflow-section {
+            margin-bottom: 60px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 30px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .workflow-comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 1000px) {
+            .workflow-comparison {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .workflow-panel {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 30px;
+        }
+
+        .workflow-panel.panel-a {
+            border: 2px solid var(--primary-a);
+        }
+
+        .workflow-panel.panel-b {
+            border: 2px solid var(--primary-b);
+        }
+
+        .workflow-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .workflow-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .panel-a .workflow-icon {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+
+        .panel-b .workflow-icon {
+            background: linear-gradient(135deg, #10b981, #14b8a6);
+        }
+
+        .workflow-header h3 {
+            font-size: 1.2rem;
+        }
+
+        .workflow-steps {
+            position: relative;
+        }
+
+        .workflow-step {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .step-number {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+        }
+
+        .panel-a .step-number {
+            background: var(--primary-a);
+        }
+
+        .panel-b .step-number {
+            background: var(--primary-b);
+        }
+
+        .workflow-step:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            left: 17px;
+            top: 36px;
+            width: 2px;
+            height: calc(100% - 16px);
+            background: var(--border);
+        }
+
+        .step-content {
+            flex: 1;
+            padding-top: 6px;
+        }
+
+        .step-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .step-desc {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .step-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .step-tag {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+
+        .panel-a .step-tag {
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+        }
+
+        .panel-b .step-tag {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+        }
+
+        .flowchart-container {
+            background: var(--bg-card);
+            border-radius: 16px;
+            padding: 40px;
+            overflow-x: auto;
+        }
+
+        .flowchart-title {
+            text-align: center;
+            font-size: 1.3rem;
+            margin-bottom: 30px;
+        }
+
+        .comparison-points {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .point-card {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid var(--border);
+        }
+
+        .point-card h4 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .point-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .point-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .point-tags {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .tag-a {
+            padding: 4px 10px;
+            background: rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        .tag-b {
+            padding: 4px 10px;
+            background: rgba(16, 185, 129, 0.2);
+            color: #6ee7b7;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>工作流程对比</h1>
+
+            <nav>
+                <a href="index.html">总览</a>
+                <a href="architecture.html">技术架构</a>
+                <a href="workflow.html" class="active">工作流程</a>
+                <a href="features.html">功能特性</a>
+            </nav>
+        </header>
+
+        <section class="workflow-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                </svg>
+                完整工作流程对比
+            </h2>
+
+            <div class="workflow-comparison">
+                <div class="workflow-panel panel-a">
+                    <div class="workflow-header">
+                        <div class="workflow-icon">🎬</div>
+                        <div>
+                            <h3>AI 智能分镜 Pro</h3>
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">6步完成分镜</span>
+                        </div>
+                    </div>
+
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-title">创建项目</div>
+                                <div class="step-desc">设置项目名称、宽高比、风格预设</div>
+                                <div class="step-features">
+                                    <span class="step-tag">16:9 / 9:16 / 1:1</span>
+                                    <span class="step-tag">风格模板</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-title">导入/创建内容</div>
+                                <div class="step-desc">智能导入PDF/Word/MD，或手动创建角色场景</div>
+                                <div class="step-features">
+                                    <span class="step-tag">Claude分析</span>
+                                    <span class="step-tag">多格式支持</span>
+                                    <span class="step-tag">角色/场景/道具</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-title">规划分镜</div>
+                                <div class="step-desc">选择模板(T1-T9)，配置镜头参数</div>
+                                <div class="step-features">
+                                    <span class="step-tag">9种模板</span>
+                                    <span class="step-tag">镜头距离</span>
+                                    <span class="step-tag">角度控制</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-title">AI生成</div>
+                                <div class="step-desc">选择后端生成图像/视频</div>
+                                <div class="step-features">
+                                    <span class="step-tag">苍何API</span>
+                                    <span class="step-tag">ComfyUI</span>
+                                    <span class="step-tag">批量生成</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-title">审核编辑</div>
+                                <div class="step-desc">预览、调整、重新生成</div>
+                                <div class="step-features">
+                                    <span class="step-tag">提示词调整</span>
+                                    <span class="step-tag">版本管理</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">6</div>
+                            <div class="step-content">
+                                <div class="step-title">导出交付</div>
+                                <div class="step-desc">多格式导出分镜成果</div>
+                                <div class="step-features">
+                                    <span class="step-tag">JSON</span>
+                                    <span class="step-tag">ZIP</span>
+                                    <span class="step-tag">PDF</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="workflow-panel panel-b">
+                    <div class="workflow-header">
+                        <div class="workflow-icon">🎥</div>
+                        <div>
+                            <h3>分镜大师 Storyboard</h3>
+                            <span style="color: var(--text-secondary); font-size: 0.9rem;">10步完整流程</span>
+                        </div>
+                    </div>
+
+                    <div class="workflow-steps">
+                        <div class="workflow-step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-title">创建项目</div>
+                                <div class="step-desc">初始化项目，配置AI服务</div>
+                                <div class="step-features">
+                                    <span class="step-tag">SQLite存储</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-title">选择创作模式</div>
+                                <div class="step-desc">视频导入模式 或 文本生成模式</div>
+                                <div class="step-features">
+                                    <span class="step-tag">双模式</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-title">视频/文本输入</div>
+                                <div class="step-desc">导入视频文件或输入故事文本</div>
+                                <div class="step-features">
+                                    <span class="step-tag">视频导入</span>
+                                    <span class="step-tag">文本输入</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-title">智能抽帧</div>
+                                <div class="step-desc">4种抽帧算法自动提取关键帧</div>
+                                <div class="step-features">
+                                    <span class="step-tag">FFmpeg</span>
+                                    <span class="step-tag">4种算法</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-title">AI分析</div>
+                                <div class="step-desc">生成帧描述和场景分析</div>
+                                <div class="step-features">
+                                    <span class="step-tag">通义/火山</span>
+                                    <span class="step-tag">OpenAI</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">6</div>
+                            <div class="step-content">
+                                <div class="step-title">镜头编辑</div>
+                                <div class="step-desc">调整镜头参数和描述</div>
+                                <div class="step-features">
+                                    <span class="step-tag">专业参数</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">7</div>
+                            <div class="step-content">
+                                <div class="step-title">图像生成</div>
+                                <div class="step-desc">AI生成分镜图像</div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">8</div>
+                            <div class="step-content">
+                                <div class="step-title">视频生成</div>
+                                <div class="step-desc">生成镜头视频片段</div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">9</div>
+                            <div class="step-content">
+                                <div class="step-title">合成</div>
+                                <div class="step-desc">组合所有镜头</div>
+                            </div>
+                        </div>
+
+                        <div class="workflow-step">
+                            <div class="step-number">10</div>
+                            <div class="step-content">
+                                <div class="step-title">导出</div>
+                                <div class="step-desc">输出最终成果</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="workflow-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                流程可视化
+            </h2>
+
+            <div class="flowchart-container">
+                <svg width="100%" height="500" viewBox="0 0 1200 500" preserveAspectRatio="xMidYMid meet">
+                    <!-- Title -->
+                    <text x="600" y="30" fill="#f1f5f9" font-size="18" font-weight="bold" text-anchor="middle">工作流程对比图</text>
+
+                    <!-- Project A Flow -->
+                    <text x="300" y="70" fill="#6366f1" font-size="14" font-weight="bold" text-anchor="middle">AI 智能分镜 Pro</text>
+
+                    <!-- A Step 1 -->
+                    <rect x="50" y="90" width="120" height="50" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="2"/>
+                    <text x="110" y="120" fill="#f1f5f9" font-size="11" text-anchor="middle">创建项目</text>
+
+                    <path d="M170 115 L190 115" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowA)"/>
+
+                    <!-- A Step 2 -->
+                    <rect x="190" y="90" width="120" height="50" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="2"/>
+                    <text x="250" y="112" fill="#f1f5f9" font-size="11" text-anchor="middle">导入内容</text>
+                    <text x="250" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">PDF/Word/MD</text>
+
+                    <path d="M310 115 L330 115" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowA)"/>
+
+                    <!-- A Step 3 -->
+                    <rect x="330" y="90" width="120" height="50" rx="8" fill="#1e293b" stroke="#6366f1" stroke-width="2"/>
+                    <text x="390" y="112" fill="#f1f5f9" font-size="11" text-anchor="middle">规划分镜</text>
+                    <text x="390" y="128" fill="#94a3b8" font-size="9" text-anchor="middle">9种模板</text>
+
+                    <path d="M450 115 L470 115" stroke="#6366f1" stroke-width="2" marker-end="url(#arrowA)"/>
+
+                    <!-- A Step 4 -->
+                    <rect x="470" y="90" width="120" height="50" rx="8" fill="rgba(99, 102, 241, 0.3)" stroke="#6366f1" stroke-width="2"/>
+                    <text x="530" y="112" fill="#f1f5f9" font-size="11" text-anchor="middle">AI生成</text>
+                    <text x="530" y="128" fill="#a5b4fc" font-size="9" text-anchor="middle">苍何/ComfyUI</text>
+
+                    <!-- Project B Flow -->
+                    <text x="300" y="200" fill="#10b981" font-size="14" font-weight="bold" text-anchor="middle">分镜大师 Storyboard</text>
+
+                    <!-- B Step 1 -->
+                    <rect x="50" y="220" width="100" height="50" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+                    <text x="100" y="250" fill="#f1f5f9" font-size="10" text-anchor="middle">创建项目</text>
+
+                    <path d="M150 245 L165 245" stroke="#10b981" stroke-width="2" marker-end="url(#arrowB)"/>
+
+                    <!-- B Step 2 -->
+                    <rect x="165" y="220" width="100" height="50" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+                    <text x="215" y="250" fill="#f1f5f9" font-size="10" text-anchor="middle">选择模式</text>
+
+                    <path d="M265 245 L280 245" stroke="#10b981" stroke-width="2" marker-end="url(#arrowB)"/>
+
+                    <!-- B Step 3 -->
+                    <rect x="280" y="220" width="100" height="50" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+                    <text x="330" y="242" fill="#f1f5f9" font-size="10" text-anchor="middle">视频/文本</text>
+                    <text x="330" y="258" fill="#94a3b8" font-size="8" text-anchor="middle">导入</text>
+
+                    <path d="M380 245 L395 245" stroke="#10b981" stroke-width="2" marker-end="url(#arrowB)"/>
+
+                    <!-- B Step 4 -->
+                    <rect x="395" y="220" width="100" height="50" rx="8" fill="rgba(16, 185, 129, 0.3)" stroke="#10b981" stroke-width="2"/>
+                    <text x="445" y="242" fill="#f1f5f9" font-size="10" text-anchor="middle">智能抽帧</text>
+                    <text x="445" y="258" fill="#6ee7b7" font-size="8" text-anchor="middle">FFmpeg</text>
+
+                    <path d="M495 245 L510 245" stroke="#10b981" stroke-width="2" marker-end="url(#arrowB)"/>
+
+                    <!-- B Step 5 -->
+                    <rect x="510" y="220" width="100" height="50" rx="8" fill="rgba(16, 185, 129, 0.3)" stroke="#10b981" stroke-width="2"/>
+                    <text x="560" y="242" fill="#f1f5f9" font-size="10" text-anchor="middle">AI分析</text>
+                    <text x="560" y="258" fill="#6ee7b7" font-size="8" text-anchor="middle">通义/火山</text>
+
+                    <!-- Difference Box -->
+                    <rect x="50" y="320" width="560" height="160" rx="12" fill="rgba(99, 102, 241, 0.05)" stroke="#334155" stroke-width="1" stroke-dasharray="5,5"/>
+                    <text x="330" y="350" fill="#f1f5f9" font-size="14" font-weight="bold" text-anchor="middle">核心流程差异</text>
+
+                    <!-- Difference 1 -->
+                    <rect x="70" y="370" width="240" height="40" rx="6" fill="#1e293b"/>
+                    <circle cx="90" cy="390" r="8" fill="#6366f1"/>
+                    <text x="110" y="395" fill="#f1f5f9" font-size="11">模板驱动：9种预设镜头模板</text>
+
+                    <!-- Difference 2 -->
+                    <rect x="70" y="420" width="240" height="40" rx="6" fill="#1e293b"/>
+                    <circle cx="90" cy="440" r="8" fill="#10b981"/>
+                    <text x="110" y="445" fill="#f1f5f9" font-size="11">视频驱动：智能抽帧分析</text>
+
+                    <!-- Difference 3 -->
+                    <rect x="340" y="370" width="250" height="40" rx="6" fill="#1e293b"/>
+                    <circle cx="360" cy="390" r="8" fill="#6366f1"/>
+                    <text x="380" y="395" fill="#f1f5f9" font-size="11">Web优先：三端覆盖，API集成</text>
+
+                    <!-- Difference 4 -->
+                    <rect x="340" y="420" width="250" height="40" rx="6" fill="#1e293b"/>
+                    <circle cx="360" cy="440" r="8" fill="#10b981"/>
+                    <text x="380" y="445" fill="#f1f5f9" font-size="11">本地优先：数据私有，离线工作</text>
+
+                    <!-- Arrow markers -->
+                    <defs>
+                        <marker id="arrowA" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                            <path d="M0,0 L0,6 L9,3 z" fill="#6366f1"/>
+                        </marker>
+                        <marker id="arrowB" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+                            <path d="M0,0 L0,6 L9,3 z" fill="#10b981"/>
+                        </marker>
+                    </defs>
+                </svg>
+            </div>
+        </section>
+
+        <section class="workflow-section">
+            <h2 class="section-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                流程对比要点
+            </h2>
+
+            <div class="comparison-points">
+                <div class="point-card">
+                    <h4>
+                        <span class="point-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                        </span>
+                        输入方式
+                    </h4>
+                    <p>两者都支持多种输入方式，但侧重点不同</p>
+                    <div class="point-tags">
+                        <span class="tag-a">文档导入优先</span>
+                        <span class="tag-b">视频导入优先</span>
+                    </div>
+                </div>
+
+                <div class="point-card">
+                    <h4>
+                        <span class="point-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="3" y1="9" x2="21" y2="9"></line>
+                                <line x1="9" y1="21" x2="9" y2="9"></line>
+                            </svg>
+                        </span>
+                        分镜规划
+                    </h4>
+                    <p>镜头规划的方法论有所不同</p>
+                    <div class="point-tags">
+                        <span class="tag-a">模板系统(T1-T9)</span>
+                        <span class="tag-b">专业电影参数</span>
+                    </div>
+                </div>
+
+                <div class="point-card">
+                    <h4>
+                        <span class="point-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                        </span>
+                        AI生成
+                    </h4>
+                    <p>支持的AI服务提供商不同</p>
+                    <div class="point-tags">
+                        <span class="tag-a">苍何API/ComfyUI</span>
+                        <span class="tag-b">通义/火山/OpenAI</span>
+                    </div>
+                </div>
+
+                <div class="point-card">
+                    <h4>
+                        <span class="point-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                        </span>
+                        导出能力
+                    </h4>
+                    <p>都支持多格式导出</p>
+                    <div class="point-tags">
+                        <span class="tag-a">JSON/ZIP/PDF</span>
+                        <span class="tag-b">视频合成导出</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>工作流程对比分析 | 生成于 2026-02-03</p>
+        </footer>
+    </div>
+</body>
+</html>

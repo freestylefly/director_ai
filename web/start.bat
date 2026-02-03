@@ -1,57 +1,80 @@
 @echo off
-title AI Storyboard Pro v2.0 - Startup
+chcp 65001 >nul 2>&1
+title AI Storyboard Pro v2.2 - Startup
 
 echo ============================================
-echo      AI Storyboard Pro v2.0
-echo      AI Smart Storyboard System
+echo      AI Storyboard Pro v2.2
+echo      AI 智能分镜系统
 echo ============================================
 echo.
 
 cd /d "%~dp0"
 
-REM Check and kill process on port 7861
-echo [1/4] Checking port 7861...
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":7861.*LISTENING"') do (
-    echo        Found process (PID: %%a)
-    echo        Killing...
-    taskkill /PID %%a /F >nul 2>&1
+REM 默认端口
+set PORT=7910
+
+REM 从 .env 读取端口配置
+if exist ".env" (
+    for /f "tokens=1,2 delims==" %%a in ('findstr /i "GRADIO_PORT" .env 2^>nul') do (
+        set PORT=%%b
+    )
 )
-echo        Port 7861 cleared
+
+REM 检测并关闭占用端口的进程
+echo [1/4^] 检测端口 %PORT%...
+set FOUND_PID=
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%PORT%.*LISTENING"') do (
+    set FOUND_PID=%%a
+)
+
+if defined FOUND_PID (
+    echo        发现占用进程 (PID: %FOUND_PID%)
+    echo        正在关闭...
+    taskkill /PID %FOUND_PID% /F >nul 2>&1
+    if %errorlevel% equ 0 (
+        echo        已关闭进程
+    ) else (
+        echo        关闭失败，请手动结束进程
+    )
+    timeout /t 2 /nobreak >nul
+) else (
+    echo        端口 %PORT% 空闲
+)
 
 echo.
-echo [2/4] Checking dependencies...
+echo [2/4^] 检测依赖...
 pip show gradio >nul 2>&1
 if %errorlevel% neq 0 (
-    echo        Installing dependencies...
+    echo        安装依赖中...
     pip install -r requirements.txt
 ) else (
-    echo        Dependencies OK
+    echo        依赖已就绪
 )
 
 echo.
-echo [3/4] Checking configuration...
+echo [3/4^] 检测配置...
 if not exist ".env" (
-    echo        No configuration found.
-    echo        Running setup wizard...
+    echo        未找到配置文件
+    echo        运行配置向导...
     echo.
     python setup_wizard.py
     if %errorlevel% neq 0 (
         echo.
-        echo        Setup failed or cancelled.
-        echo        Please create .env from .env.example
+        echo        配置失败或取消
+        echo        请从 .env.example 创建 .env
         pause
         exit /b 1
     )
 ) else (
-    echo        Configuration OK
+    echo        配置已就绪
 )
 
 echo.
-echo [4/4] Starting server...
+echo [4/4^] 启动服务器...
 echo.
 echo ============================================
-echo    Server URL: http://localhost:7861
-echo    Press Ctrl+C to stop
+echo    服务地址: http://localhost:%PORT%
+echo    按 Ctrl+C 停止服务
 echo ============================================
 echo.
 
