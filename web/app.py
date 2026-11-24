@@ -1939,18 +1939,16 @@ def generate_single_shot(shot_num: int, custom_prompt: str = "") -> Tuple[str, O
     if _canghe_unified_config.get("enabled") and _canghe_unified_config.get("image_enabled"):
         effective_api_key = _canghe_unified_config.get("api_key", "")
 
-    if not effective_api_key or effective_api_key == "your_api_key_here":
+    if settings.image_backend != "minimax" and effective_api_key in ("", None, "your_api_key_here"):
         cli_output_history.append("[图像生成] ✗ 错误: API Key 未配置，请在设置中配置苍何 API Key")
         return "API Key 未配置，请先在设置中配置", None
 
     cli_output_history.append(f"[图像生成] 开始生成镜头 {shot_num}...")
-    cli_output_history.append(f"[图像生成] 使用 API: {'苍何统一' if _canghe_unified_config.get('enabled') else '默认'}")
-    cli_output_history.append(f"[图像生成] 图像模型: {_canghe_unified_config.get('image_model', 'nano-banana')}")
-    cli_output_history.append(f"[图像生成] API Key: {effective_api_key[:10]}...{effective_api_key[-4:] if len(effective_api_key) > 14 else ''}")
     cli_output_history.append(f"[图像生成] 提示词: {prompt[:60]}...")
 
     try:
         generator = create_generator(effective_api_key, str(OUTPUTS_DIR))
+        cli_output_history.append(f"Image generator: {type(generator).__name__}")
     except ValueError as e:
         cli_output_history.append(f"[图像生成] ✗ 创建生成器失败: {str(e)}")
         return f"创建生成器失败: {str(e)}", None
@@ -9049,21 +9047,25 @@ def create_ui():
 
                 # 图像生成配置 - 苍何 API / ComfyUI
                 with gr.Accordion("🎨 图像生成", open=False):
+                    _minimax_enabled = settings.image_backend == "minimax"
                     gr.HTML("""
                     <div style="padding: 8px 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; margin-bottom: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
                         <span style="color: #93c5fd; font-size: 12px;">💡 苍何 API 配置请在页面顶部「🌊 苍何 API 配置」中设置</span>
                     </div>
-                    """)
+                    """, visible=not _minimax_enabled)
                     _saved_backend = get_saved_image_backend()
+                    if _minimax_enabled:
+                        gr.Markdown(f"MiniMax H3 · {settings.minimax_image_model} ({settings.minimax_image_region})")
                     img_provider_cn = gr.Radio(
                         ["苍何 API (云端)", "本地 ComfyUI"],
                         label="选择引擎",
-                        value=_saved_backend
+                        value=_saved_backend,
+                        visible=not _minimax_enabled,
                     )
 
                     # 苍何 API 配置区域 (可手动切换模型)
                     _is_canghe = "苍何" in _saved_backend
-                    with gr.Group(visible=_is_canghe) as canghe_config_group:
+                    with gr.Group(visible=_is_canghe and not _minimax_enabled) as canghe_config_group:
                         # 隐藏的输入框，保持兼容性
                         canghe_api_key_input = gr.Textbox(
                             label="",
@@ -9093,7 +9095,7 @@ def create_ui():
                             )
 
                     # ComfyUI 配置区域
-                    with gr.Group(visible=not _is_canghe) as comfyui_config_group:
+                    with gr.Group(visible=not _is_canghe and not _minimax_enabled) as comfyui_config_group:
                         gr.Markdown("**ComfyUI 工作流**", elem_classes="workflow-label")
                         with gr.Row():
                             load_default_workflow_btn = gr.Button(
@@ -12504,8 +12506,8 @@ def create_ui():
             is_canghe = "苍何" in backend
             return (
                 status_html,
-                gr.update(visible=is_canghe),
-                gr.update(visible=not is_canghe)
+                gr.update(visible=is_canghe and not _minimax_enabled),
+                gr.update(visible=not is_canghe and not _minimax_enabled)
             )
 
         # 镜头预览弹窗初始化 JavaScript
