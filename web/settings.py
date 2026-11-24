@@ -65,6 +65,10 @@ class Settings:
         "IMAGE_BACKEND", "canghe"
     ).lower())
 
+    minimax_api_key: str = field(default_factory=lambda: os.getenv("MINIMAX_API_KEY", ""), repr=False)
+    minimax_image_region: str = field(default_factory=lambda: os.getenv("MINIMAX_IMAGE_REGION", "global"))
+    minimax_image_model: str = field(default_factory=lambda: os.getenv("MINIMAX_IMAGE_MODEL", "MiniMax-H3-Image"))
+
     # ===========================================
     # 服务器配置
     # ===========================================

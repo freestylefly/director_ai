@@ -777,6 +777,25 @@ def create_generator(api_key: str = "", output_dir: str = "outputs", backend: st
     Returns:
         CangheImageGenerator 或 ComfyUIImageGenerator
     """
+    try:
+        from settings import settings
+    except ImportError:
+        settings = None
+
+    if backend is None:
+        backend = settings.image_backend if settings else ("canghe" if api_key else "comfyui")
+    if backend.lower() == "minimax":
+        if settings is None:
+            raise ValueError("MiniMax image settings are unavailable.")
+        from minimax_image import MiniMaxImageGenerator
+
+        return MiniMaxImageGenerator(
+            settings.minimax_api_key,
+            settings.minimax_image_region,
+            model or settings.minimax_image_model,
+            output_dir,
+        )
+
     # 优先检查统一苍何 API 配置
     unified_api_key = None
     unified_image_enabled = True
@@ -825,14 +844,6 @@ def create_generator(api_key: str = "", output_dir: str = "outputs", backend: st
                                 break
         except Exception as e:
             print(f"[create_generator] 从配置文件读取失败: {e}")
-
-    # 从设置获取后端类型
-    if backend is None:
-        try:
-            from settings import settings
-            backend = settings.image_backend
-        except ImportError:
-            backend = "canghe" if api_key else "comfyui"
 
     backend = backend.lower()
 
